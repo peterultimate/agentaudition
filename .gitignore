@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output. The workspace packages compile to a gitignored dist/ on purpose:
+# Vercel builds them from source, so a committed dist/ would be a stale copy that
+# `next build` silently resolves instead of the real thing.
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment. .env.example is committed; anything with real values is not.
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Test and tooling caches
+coverage/
+.vercel/
+.turbo/
+*.log
+
+# Python (the GenLayer arbiter and its pytest suite)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Foundry (the contracts workspace, forks and caches)
+out/
+cache/
+broadcast/
+lib/
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

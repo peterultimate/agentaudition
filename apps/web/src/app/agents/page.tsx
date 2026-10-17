@@ -1,0 +1,174 @@
+import { AGENT_CATEGORIES, endpointHost, isThin, type AgentCategory } from '@agentaudition/core';
+import { data, isLiveData } from '@/lib/data/index';
+import { showLiveOnly } from '@/lib/catalog-view';
+import { CatalogFilter, type AgentRow } from '@/components/CatalogFilter';
+import { agentHref } from '@/lib/format';
+
+/**
+ * Rendered per request, not prerendered at build time.
+ *
+ * These pages read the catalog, so prerendering them makes `next build` depend
+ * on a reachable, migrated database - and the build and the database are
+ * independently available in every deployment that matters. CI caught it
+ * first: the same `npm run build` passed without DATABASE_URL and failed with
+ * it, against a database whose migrations had not run yet. On Vercel the same
+ * shape means a brief database blip fails a deploy that had nothing to do with
+ * the database.
+ *
+ * The cost is a handful of queries per request instead of one per minute, which
+ * at this traffic is not a cost. The gain is that the catalog is never stale -
+ * which matters more than it sounds when the thing being judged is whether the
+ * agents are live *now*.
+ */
+export const dynamic = 'force-dynamic';
+
+export const metadata = { title: 'Catalog - AgentAudition' };
+
+export default async function AgentsPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{
+    readonly category?: string;
+    readonly live?: string;
+    readonly page?: string;
+  }>;
+}) {
+  const params = await searchParams;
+
+  // Verified-live is the default view, and `?live=false` opts out. That way a
+  // shared link carries the filter it was shared under, which the old client
+  // state could not do.
+  let liveOnly = params.live !== 'false';
+  const category = AGENT_CATEGORIES.includes(params.category as never)
+    ? (params.category as AgentCategory)
+    : 'all';
+
+  /**
+   * Both counts, always: how many are live, and how many exist.
+   *
+   * The chips showed only the count under the current filter, so the default
+   * live-only view rendered "Health factor 0" - which reads as a marketplace
+   * with nothing in it, when the truth is 38 registered and none of them
+   * answering. Those are opposite impressions of the same fact, and the
+   * second one is both more accurate and more useful: the depth of each
+   * category is a property of the registry, and how much of it is alive is
+   * the measurement this catalog exists to make.
+   */
+  const [initial, initialCounts, registered, hosts] = await Promise.all([
+    data.listAgents({
+      verifiedLiveOnly: liveOnly,
+      ...(category === 'all' ? {} : { category }),
+    }),
+    data.categoryCounts({ verifiedLiveOnly: liveOnly }),
+    data.categoryCounts({ verifiedLiveOnly: false }),
+    /**
+     * How many verified-live agents sit behind each host.
+     *
+     * Counted over the whole live set, not over the page. A badge that said
+     * "2 agents here" because two happened to load together would be a
+     * statement about pagination - the same mistake the category chips made
+     * before they were counted in SQL.
+     */
+    data.hostConcentration(),
+  ]);
+  const sharing = new Map(hosts.map((h) => [h.host, h.agents]));
+  let agents = initial;
+  let counts = initialCounts;
+
+  // Never open on an empty page - but only when the filter was not asked for.
+  // See showLiveOnly, which is a separate function because the condition that
+  // used to live here was true for every array ever made.
+  if (liveOnly && !showLiveOnly(params.live, agents.length)) {
+    liveOnly = false;
+    [agents, counts] = await Promise.all([
+      data.listAgents({ verifiedLiveOnly: false, ...(category === 'all' ? {} : { category }) }),
+      data.categoryCounts({ verifiedLiveOnly: false }),
+    ]);
+  }
+
+  const totalIndexed = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  /**
+   * Ten to a page, clamped into range here rather than trusted from the URL.
+   *
+   * `?page=0`, `?page=-3` and `?page=abc` are all things a URL can say and none
+   * of them are a page. Clamped rather than refused: a stale or hand-edited
+   * number should land on the nearest real page, not on an error, because the
+   * most common source of one is a link shared after the catalog changed size.
+   */
+  const PER_PAGE = 10;
+  const pageCount = Math.max(1, Math.ceil(agents.length / PER_PAGE));
+  const requested = Number.parseInt(params.page ?? '1', 10);
+  const page = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), pageCount) : 1;
+
+  const rows: AgentRow[] = agents.map((a) => {
+    const { record, liveness, verifiedLive } = a.entry;
+    const host = endpointHost(record.card?.endpoints[0]?.url);
+    return {
+      href: agentHref(record.id.chain, record.id.tokenId),
+      tokenId: record.id.tokenId.toString(),
+      name: record.card?.name ?? 'Unresolved agent card',
+      image: record.card?.image,
+      description: record.card?.description ?? record.cardError ?? '',
+      category: record.card?.category ?? 'other',
+      drivable: (record.card?.endpoints ?? []).some(
+        (e) => e.protocol === 'a2a' || e.protocol === 'mcp',
+      ),
+      verifiedLive,
+      /**
+       * The host this agent answers on, and how many live agents share it.
+       *
+       * Taken from the first declared endpoint, which is the one the prober
+       * reaches and therefore the one "verified live" is a claim about. An
+       * agent declaring several hosts is rare and the first is the one that
+       * earned the badge.
+       */
+      host,
+      hostAgents: host === null ? 0 : (sharing.get(host) ?? 0),
+      conformant: liveness.conformant,
+      uptimeBps: liveness.uptimeBps,
+      p95LatencyMs: liveness.p95LatencyMs,
+      probeCount: liveness.probeCount,
+      deltaUsd: a.score?.meanDeltaUsd ?? null,
+      sampleSize: a.score?.sampleSize ?? 0,
+      thin: a.score ? isThin(a.score) : false,
+      failedAuditions: a.failedAuditions?.count ?? 0,
+      failureReason: a.failedAuditions?.lastReason ?? null,
+    };
+  });
+
+  return (
+    <section className="wrap section">
+      <div className="stack stack-32">
+        <div className="stack stack-16" style={{ maxWidth: '44rem' }}>
+          <span className="eyebrow">Catalog</span>
+          <h1 className="h2">Every agent, with its record attached.</h1>
+          {isLiveData ? null : (
+            <p className="notice notice-warn" role="status">
+              This deployment has no database configured, so these figures are fixtures, not indexed
+              data.
+            </p>
+          )}
+          <p className="lead">
+            Ranked on the dollars each agent moved against a do-nothing baseline, over the same
+            position and window. Agents with no result say which kind of nothing it was.
+          </p>
+        </div>
+
+        <CatalogFilter
+          rows={rows}
+          counts={{ ...counts, all: totalIndexed }}
+          registered={{
+            ...registered,
+            all: Object.values(registered).reduce((a, b) => a + b, 0),
+          }}
+          category={category}
+          liveOnly={liveOnly}
+          totalIndexed={totalIndexed}
+          page={page}
+          perPage={PER_PAGE}
+        />
+      </div>
+    </section>
+  );
+}

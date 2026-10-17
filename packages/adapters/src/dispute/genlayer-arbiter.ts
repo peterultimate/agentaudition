@@ -1,0 +1,721 @@
+import { createHash } from 'node:crypto';
+import { createAccount, createClient, isSuccessful } from 'genlayer-js';
+import {
+  localnet,
+  studioDevnet,
+  studionet,
+  testnetAsimov,
+  testnetBradbury,
+} from 'genlayer-js/chains';
+import { TransactionStatus } from 'genlayer-js/types';
+import { AgentAuditionError, classifyEvidence, hireIdOf, hireKey } from '@agentaudition/core';
+import type {
+  DisputeFiling,
+  DisputeLimits,
+  DisputeGround,
+  DisputeRecord,
+  DisputeResolver,
+  DisputeState,
+  DisputeTerms,
+  DisputeVerdictRecord,
+  EvidenceIndependence,
+  EvidenceSource,
+  HireRegistration,
+  PinnedHire,
+} from '@agentaudition/core';
+import type { Address } from '@agentaudition/core';
+
+/**
+ * The dispute layer's only real adapter: a GenLayer Intelligent Contract.
+ *
+ * Why a second chain at all, when AgentAudition already runs on BSC. A dispute needs a
+ * ruling, a ruling needs judgment, and judgment is the one thing an EVM cannot
+ * perform - it has no way to read a page, weigh what it says, and have other
+ * nodes agree that the weighing was reasonable. The usual answer is a
+ * multisig, a whitelisted voter set, or the marketplace itself, and all three
+ * put the decision in the hands of someone with an interest in it.
+ *
+ * GenLayer's validators each fetch the evidence, each run the model, and
+ * compare structured rulings rather than bytes. That is the shape this needs:
+ * the disagreement that matters is about the verdict, not about which CDN edge
+ * served which banner.
+ *
+ * **Reads need no account and no gas.** Every view on the Arbiter is free, so a
+ * AgentAudition page renders a dispute, its state and its evidence tally without a
+ * signer configured. Writes need one, and the adapter says which it has.
+ */
+
+/**
+ * Networks this adapter will talk to, named the way a config file should read.
+ *
+ * `unknown` and one cast at `createClient`, which is not laziness. The SDK's
+ * own types do not typecheck against each other under
+ * `exactOptionalPropertyTypes`: its exported chains declare
+ * `blockExplorers?: {...} | undefined` and its client config declares
+ * `blockExplorers?: {...}`, so `createClient({ chain: studionet })` is rejected
+ * by TypeScript while being the SDK's own documented usage. Inferring the type
+ * here also emits a declaration referencing a hashed internal module that
+ * cannot be named from outside the package.
+ *
+ * The alternative is relaxing `exactOptionalPropertyTypes` for the whole
+ * workspace, which would trade a real guarantee across every file for a
+ * third-party packaging problem in one. The cast is confined to the single
+ * expression that needs it and the chain values are the SDK's own constants,
+ * so nothing about them is being asserted that the SDK does not already
+ * guarantee at runtime.
+ */
+/**
+ * Studio Next is the SDK's `studioDevnet`: chain 61997, one network under two
+ * names.
+ *
+ * Worth stating because the two names point at different hosts - the RPC
+ * announced for the hackathon is `studio-next.genlayer.com/api` and the SDK's
+ * constant carries `studio-dev.genlayer.com/api` - and the explorer both share,
+ * `explorer-studio-dev.genlayer.com`, is what settles that they are the same
+ * chain. The endpoint is supplied from config either way, so the constant is
+ * here for its id and its `isStudio` flag: the SDK branches on the latter in
+ * nine places to speak the Studio JSON-RPC dialect rather than driving the
+ * consensus contract directly.
+ */
+const CHAINS: Readonly<Record<string, unknown>> = {
+  localnet,
+  studionet,
+  'studio-next': studioDevnet,
+  'studio-devnet': studioDevnet,
+  'testnet-bradbury': testnetBradbury,
+  'testnet-asimov': testnetAsimov,
+};
+
+type SdkChain = NonNullable<NonNullable<Parameters<typeof createClient>[0]>['chain']>;
+
+export type GenLayerChainName =
+  | 'localnet'
+  | 'studionet'
+  | 'studio-next'
+  | 'studio-devnet'
+  | 'testnet-bradbury'
+  | 'testnet-asimov';
+
+export interface GenLayerArbiterOptions {
+  readonly rpcUrl: string;
+  readonly address: Address;
+  /** Which GenLayer network. Defaults to testnet Bradbury. */
+  readonly chain?: GenLayerChainName;
+  /**
+   * The key that pays for writes.
+   *
+   * Optional, and its absence is not an error: reads carry the whole of what a
+   * page needs and a deployment that only displays disputes should not have to
+   * hold a funded key to do it.
+   */
+  readonly privateKey?: string;
+  /**
+   * The address hires on this deployment are registered under.
+   *
+   * The arbiter keys a hire on `<registrar>/<hireId>` so nobody can claim an id
+   * they did not create - see `hire_key` in the contract. That means a reader
+   * needs to know the registrar to look a hire up, and a deployment configured
+   * for reads only has no signer to derive it from. It defaults to the signer's
+   * own address when there is one, which is the case that matters; an explicit
+   * value is for the read-only deployment, and for a AgentAudition that rotates its
+   * signing key without orphaning every hire the old key registered.
+   */
+  readonly registrar?: Address;
+  /** AgentAudition's own host, so the arbiter can mark AgentAudition's data as interested. */
+  readonly marketplaceDomain?: string;
+  /** How long to wait for a write to reach ACCEPTED. */
+  readonly receiptRetries?: number;
+  readonly receiptIntervalMs?: number;
+}
+
+type Client = ReturnType<typeof createClient>;
+
+const DEFAULTS = {
+  chain: 'testnet-bradbury' as const,
+  receiptRetries: 200,
+  receiptIntervalMs: 5_000,
+};
+
+/** Read one field out of a contract's dict return, whatever the SDK hands back. */
+function field(value: unknown, key: string): unknown {
+  if (value instanceof Map) return value.get(key);
+  if (typeof value === 'object' && value !== null) {
+    return (value as Record<string, unknown>)[key];
+  }
+  return undefined;
+}
+
+const asString = (v: unknown, fallback = ''): string =>
+  typeof v === 'string' ? v : v === undefined || v === null ? fallback : String(v);
+
+const asNumber = (v: unknown, fallback = 0): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'bigint') return Number(v);
+  const parsed = Number(asString(v, ''));
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const asBigInt = (v: unknown): bigint => {
+  if (typeof v === 'bigint') return v;
+  if (typeof v === 'number') return BigInt(Math.trunc(v));
+  try {
+    return BigInt(asString(v, '0'));
+  } catch {
+    return 0n;
+  }
+};
+
+const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** The contract speaks in upper case; AgentAudition's types are lower. */
+const STATES: Readonly<Record<string, DisputeState>> = {
+  OPEN: 'open',
+  UPHELD: 'upheld',
+  DISMISSED: 'dismissed',
+  ABSTAINED: 'abstained',
+};
+
+const GROUNDS: Readonly<Record<string, DisputeGround>> = {
+  BREACH: 'breach',
+  DELIVERY: 'delivery',
+};
+
+const EMPTY_TALLY: EvidenceIndependence = {
+  independent: 0,
+  claimant: 0,
+  respondent: 0,
+  marketplace: 0,
+  unclassified: 0,
+};
+
+export class GenLayerArbiter implements DisputeResolver {
+  readonly available = true;
+  readonly locator: { readonly chain: string; readonly address: string };
+
+  readonly #client: Client;
+  readonly #address: Address;
+  readonly #canWrite: boolean;
+  readonly #registrar: string;
+  readonly #retries: number;
+  readonly #interval: number;
+  readonly #marketplaceDomain: string | undefined;
+
+  constructor(opts: GenLayerArbiterOptions) {
+    const chainName = opts.chain ?? DEFAULTS.chain;
+    const chain = CHAINS[chainName];
+    if (chain === undefined) {
+      throw new AgentAuditionError('INVALID_REQUEST', `unknown GenLayer chain ${chainName}`);
+    }
+    this.#address = opts.address;
+    this.#canWrite = opts.privateKey !== undefined && opts.privateKey !== '';
+    this.#retries = opts.receiptRetries ?? DEFAULTS.receiptRetries;
+    this.#interval = opts.receiptIntervalMs ?? DEFAULTS.receiptIntervalMs;
+    this.#marketplaceDomain = opts.marketplaceDomain;
+    this.locator = { chain: chainName, address: opts.address };
+
+    const account = this.#canWrite ? createAccount(opts.privateKey as `0x${string}`) : null;
+    /**
+     * Derived from the key rather than configured beside it, so the two cannot
+     * disagree. A registrar that does not match the signer writes hires under a
+     * key its own transactions would be refused for, and the contract's refusal
+     * arrives as `bad hire key` long after the mistake was made.
+     *
+     * Refused at construction rather than at the first call, because there is
+     * no partially useful arbiter here: every hire-shaped question needs the
+     * key, and an adapter that answered `forHire` with an empty list would
+     * render a live dispute as no dispute. `buildArbiter` turns this into the
+     * unavailable state, which is a thing the UI already knows how to say.
+     */
+    const registrar = opts.registrar ?? account?.address ?? null;
+    if (registrar === null) {
+      throw new AgentAuditionError(
+        'INVALID_REQUEST',
+        'a GenLayer arbiter needs an address to register hires under: set ' +
+          'GENLAYER_SIGNER_PRIVATE_KEY, or GENLAYER_REGISTRAR_ADDRESS for a deployment that only ' +
+          'reads disputes. A hire is keyed on the address that registered it.',
+      );
+    }
+    this.#registrar = registrar;
+
+    this.#client = createClient({
+      chain: chain as SdkChain,
+      endpoint: opts.rpcUrl,
+      ...(account === null ? {} : { account }),
+    });
+  }
+
+  /**
+   * AgentAudition's hire id, as the arbiter stores it.
+   *
+   * Every call that names a hire goes through here. The contract refuses a key
+   * that does not begin with the caller's own address, so a bare id would be
+   * rejected on write and would silently find nothing on read - the worse of
+   * the two, because an empty `forHire` renders as "no dispute" on a hire that
+   * has one.
+   */
+  #key(hireId: string): string {
+    return hireKey(this.#registrar, hireId);
+  }
+
+  #requireSigner(what: string): void {
+    if (!this.#canWrite) {
+      // Named at the call site rather than left to fail inside the SDK, where
+      // it surfaces as a nonce error against an undefined account and reads
+      // like a chain problem.
+      throw new AgentAuditionError(
+        'INVALID_REQUEST',
+        `${what} needs a funded GenLayer key; this deployment has reads only`,
+      );
+    }
+  }
+
+  async #read(functionName: string, args: unknown[]): Promise<unknown> {
+    return this.#client.readContract({
+      address: this.#address,
+      functionName,
+      args: args as never,
+    });
+  }
+
+  async #write(
+    functionName: string,
+    args: unknown[],
+    value = 0n,
+    /**
+     * How long to wait for consensus before giving up on *watching* it.
+     *
+     * Not how long the transaction has: it is submitted either way, and the
+     * chain finishes with it whether or not anyone is still looking. This is
+     * only the caller's patience, and some callers do not have any to spare.
+     */
+    budget: {
+      readonly retries: number;
+      readonly interval: number;
+      /**
+       * Whether running out of patience counts as a failure.
+       *
+       * For a caller that reads the result back off the chain afterwards it
+       * does not: the transaction was submitted and consensus finishes with it
+       * either way, so reporting a failure would be reporting the wrong thing
+       * about a call that is going to succeed - and then offering a retry the
+       * contract refuses, because by the time anyone clicks it the first one
+       * has landed.
+       */
+      readonly tolerateTimeout?: boolean;
+    } = {
+      retries: this.#retries,
+      interval: this.#interval,
+    },
+  ): Promise<void> {
+    /**
+     * Consensus v0.6 charges for execution, and a write with no fee attached is
+     * rejected outright - `FeeValueMustBeNonZero`, before the contract runs.
+     *
+     * Estimated per call rather than pinned to a constant. The quote covers
+     * validator time units, storage and receipt gas at current network prices,
+     * and the two grounds cost wildly different amounts: a breach replay is
+     * arithmetic over a fetched document, a delivery ruling is a model call.
+     * One hardcoded number would be too small for the second or waste GEN on
+     * the first, and too small means the transaction is refused rather than
+     * slow.
+     */
+    const fees = await this.#client.estimateTransactionFees();
+    const hash = await this.#client.writeContract({
+      address: this.#address,
+      functionName,
+      args: args as never,
+      value,
+      fees,
+    });
+    /**
+     * Waited on, not fired and forgotten.
+     *
+     * A dispute write that has not reached ACCEPTED has not happened, and the
+     * page that called it would otherwise render a filing the chain may still
+     * reject. GenLayer's consensus takes real time - validators fetch evidence
+     * and run a model - so the budget is minutes, not seconds.
+     */
+    let receipt: unknown;
+    try {
+      receipt = await this.#client.waitForTransactionReceipt({
+        hash,
+        status: TransactionStatus.ACCEPTED,
+        retries: budget.retries,
+        interval: budget.interval,
+      });
+    } catch (err) {
+      // Distinguished from a refusal on purpose. Not waiting long enough to see
+      // the answer is not the same as being told no, and only the caller knows
+      // whether it has another way to find out.
+      if (budget.tolerateTimeout === true) return;
+      throw err;
+    }
+
+    /**
+     * **ACCEPTED is about consensus, not about execution.**
+     *
+     * A call the contract refuses - wrong sender, bond below the floor, a hire
+     * nobody registered - still reaches ACCEPTED: the validators agree that it
+     * failed, which is a successful consensus about a failed call. Waiting only
+     * for the status therefore treats every `gl.vm.UserError` as a success.
+     *
+     * That is how it read before this check: `register_hire` reported a
+     * registration the chain had rejected, and a refused `open_dispute`
+     * surfaced two calls later as "the dispute did not appear after opening" -
+     * a sentence that describes the symptom and hides both the cause and the
+     * contract's own perfectly good explanation of it.
+     *
+     * The reason is worth recovering rather than flattening, because the
+     * contract's refusals are the ones a caller can act on: `screen_*` returns
+     * stable strings for exactly that.
+     */
+    if (!isSuccessful(receipt as Parameters<typeof isSuccessful>[0])) {
+      throw new AgentAuditionError(
+        'INVALID_REQUEST',
+        `the arbiter refused ${functionName}: ${refusalReason(receipt)}`,
+      );
+    }
+  }
+
+  async limits(): Promise<DisputeLimits> {
+    const raw = await this.#read('limits', []);
+    return {
+      minBond: asBigInt(field(raw, 'min_bond')),
+      answerPeriodSec: asNumber(field(raw, 'answer_period')),
+      claimPeriodSec: asNumber(field(raw, 'claim_period')),
+      maxSources: asNumber(field(raw, 'max_sources')),
+      maxExtensions: asNumber(field(raw, 'max_extensions')),
+      minConfidence: asNumber(field(raw, 'min_confidence')),
+    };
+  }
+
+  async registerHire(reg: HireRegistration): Promise<{ readonly termsHash: string }> {
+    this.#requireSigner('registering a hire');
+    const termsHash = termsDigest(reg.terms);
+    /**
+     * Submitted, then barely waited on - because the caller is a web request.
+     *
+     * Registration happens inside `createHire`, and a serverless function is
+     * killed at its platform's limit; the deployment this ships to allows ten
+     * seconds. Waiting for GenLayer consensus there does not make the hire
+     * safer, it makes the hire *fail* - and fail after the escrow and the
+     * session key already exist, which is the worst possible moment.
+     *
+     * Nothing is lost by not watching. The transaction is submitted and the
+     * chain finishes with it regardless, and the hire page reads
+     * `registration()` from the contract rather than trusting anything this
+     * call returned - so the pinned state it shows is the chain's own answer,
+     * a few seconds later. A pin that genuinely did not land shows as unpinned
+     * with a retry beside it, which is the same state and the same button as
+     * any other failure.
+     */
+    await this.#write(
+      'register_hire',
+      [
+        this.#key(reg.hireId),
+        `${reg.agent.chain}:${reg.agent.tokenId.toString()}`,
+        reg.client,
+        reg.respondent,
+        termsHash,
+        reg.recordUrl,
+        reg.claimantDomain ?? '',
+        reg.respondentDomain ?? '',
+        reg.marketplaceDomain ?? this.#marketplaceDomain ?? '',
+      ],
+      0n,
+      { retries: 2, interval: 1_500, tolerateTimeout: true },
+    );
+    return { termsHash };
+  }
+
+  async registration(hireId: string): Promise<PinnedHire | null> {
+    let raw: unknown;
+    try {
+      raw = await this.#read('hire', [this.#key(hireId)]);
+    } catch {
+      // The contract raises `hire not registered` for one it does not have, and
+      // that is an answer rather than a failure.
+      return null;
+    }
+    const termsHash = asString(field(raw, 'terms_hash'));
+    if (termsHash === '') return null;
+    return {
+      hireId: hireIdOf(asString(field(raw, 'hire_id'))),
+      agentRef: asString(field(raw, 'agent_ref')),
+      client: asString(field(raw, 'client')) as Address,
+      respondent: asString(field(raw, 'respondent')) as Address,
+      termsHash,
+      recordUrl: asString(field(raw, 'record_url')),
+      registeredAt: atSecond(field(raw, 'registered_at')),
+      registeredBy: asString(field(raw, 'registered_by')) as Address,
+    };
+  }
+
+  /**
+   * File, without waiting for consensus to finish.
+   *
+   * **A web request cannot wait for a GenLayer ruling round.** This is called
+   * from a Server Action, and a serverless function is killed at its platform's
+   * limit - ten seconds where this deploys - while filing takes a minute or two
+   * of consensus. Waiting therefore did not make the filing safer, it made the
+   * button do nothing: the transaction went out, the function was killed, and
+   * the page came back as though nothing had happened.
+   *
+   * So the bond is submitted, the wait is short, and `null` means "submitted,
+   * not yet visible". The caller does not have to trust that: every dispute is
+   * read back from the contract by the hire page, so what a reader sees is the
+   * chain's own answer a minute later rather than anything this call returned.
+   */
+  async openDispute(filing: DisputeFiling): Promise<DisputeRecord | null> {
+    this.#requireSigner('opening a dispute');
+    await this.#write(
+      'open_dispute',
+      [
+        this.#key(filing.hireId),
+        filing.ground.toUpperCase(),
+        filing.engagement,
+        [...filing.criteria],
+        [...filing.evidenceUrls],
+      ],
+      filing.bond,
+      { retries: 2, interval: 1_500, tolerateTimeout: true },
+    );
+    /**
+     * One free look, in case consensus was quick. Absence is not a failure.
+     *
+     * The id is read back rather than taken from the write, because the write
+     * returns it through consensus data whose shape varies by network. If it is
+     * not there yet, the dispute is still on its way and the page will show it
+     * on the next load - reporting an error here would be reporting a failure
+     * that has not happened.
+     */
+    const ids = await this.forHire(filing.hireId);
+    const latest = ids.at(-1);
+    return latest === undefined ? null : await this.get(latest);
+  }
+
+  async answer(disputeId: number, evidenceUrls: readonly string[]): Promise<DisputeRecord> {
+    this.#requireSigner('answering a dispute');
+    await this.#write('answer', [disputeId, [...evidenceUrls]]);
+    return this.#must(disputeId);
+  }
+
+  async adjudicate(disputeId: number, terms: DisputeTerms): Promise<DisputeRecord | null> {
+    this.#requireSigner('adjudicating');
+    // Canonical JSON, because the contract re-encodes what it is given and
+    // compares the digest: two encoders disagreeing about key order would look
+    // exactly like someone restating the terms after the fact.
+    //
+    // Bounded like the filing above, and for the same reason: adjudication runs
+    // validators over fetched evidence, which is a minute or two, and the
+    // button that starts it lives in a web page.
+    await this.#write('adjudicate', [disputeId, canonicalJson(terms)], 0n, {
+      retries: 2,
+      interval: 1_500,
+      tolerateTimeout: true,
+    });
+    return this.get(disputeId);
+  }
+
+  async #must(disputeId: number): Promise<DisputeRecord> {
+    const record = await this.get(disputeId);
+    if (record === null) {
+      throw new AgentAuditionError('UPSTREAM_UNAVAILABLE', `dispute ${disputeId} vanished`);
+    }
+    return record;
+  }
+
+  async get(disputeId: number): Promise<DisputeRecord | null> {
+    let raw: unknown;
+    try {
+      raw = await this.#read('dispute', [disputeId]);
+    } catch {
+      // The contract raises for an id it does not have. A missing dispute is an
+      // answer, not a failure, and a page asking about one should not fault.
+      return null;
+    }
+    return decodeDispute(disputeId, raw, this.#marketplaceDomain);
+  }
+
+  async forHire(hireId: string): Promise<readonly number[]> {
+    try {
+      return asList(await this.#read('disputes_for', [this.#key(hireId)])).map((v) => asNumber(v));
+    } catch {
+      return [];
+    }
+  }
+
+  async independence(disputeId: number): Promise<EvidenceIndependence> {
+    try {
+      const raw = await this.#read('evidence_independence', [disputeId]);
+      return {
+        independent: asNumber(field(raw, 'independent')),
+        claimant: asNumber(field(raw, 'claimant')),
+        respondent: asNumber(field(raw, 'respondent')),
+        marketplace: asNumber(field(raw, 'marketplace')),
+        unclassified: asNumber(field(raw, 'unclassified')),
+      };
+    } catch {
+      return EMPTY_TALLY;
+    }
+  }
+}
+
+/**
+ * What the contract said when it refused, read off the leader's receipt.
+ *
+ * The contract raises `[EXPECTED] only the client may open a dispute` and
+ * friends - stable strings, chosen so a caller can tell "not yet due" from
+ * "already settled" without matching on prose. The SDK decodes that into
+ * `result.payload`, so the work here is finding the leader rather than parsing
+ * anything: `leader_receipt` is an array on this network and a bare object on
+ * others, and a rotated leader appears more than once.
+ *
+ * Falls back to naming the execution result rather than inventing a reason. A
+ * refusal whose cause cannot be read is still a refusal, and saying so plainly
+ * beats a confident guess about which rule fired.
+ */
+export function refusalReason(receipt: unknown): string {
+  const consensus = field(receipt, 'consensus_data');
+  const leader = field(consensus, 'leader_receipt') ?? field(receipt, 'leader_receipt');
+  for (const entry of Array.isArray(leader) ? leader : [leader]) {
+    const payload = field(field(entry, 'result'), 'payload');
+    // The class prefix is for the validators comparing failures, not for a
+    // person reading why their filing bounced.
+    if (typeof payload === 'string' && payload !== '') {
+      return payload.replace(/^\[[A-Z_]+\]\s*/, '');
+    }
+  }
+  const named = field(receipt, 'txExecutionResultName') ?? field(receipt, 'status');
+  return named === undefined ? 'no reason given' : String(named);
+}
+
+/**
+ * Canonical JSON: sorted keys, no spaces.
+ *
+ * Matches `canonical_json` in the contract exactly. The digest of the terms is
+ * what stops either party restating the rules after the hire has gone wrong, so
+ * the two encoders have to agree byte for byte or every adjudication fails as
+ * tampering.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
+}
+
+/**
+ * sha256 over the canonical encoding, matching `terms_digest` in the contract.
+ *
+ * This is the value that stops either party restating the rules after the hire
+ * has gone wrong, so the two implementations have to agree byte for byte: a
+ * digest computed differently here reads on-chain as tampering rather than as a
+ * bug, and the dispute simply refuses to adjudicate.
+ */
+export function termsDigest(terms: DisputeTerms): string {
+  return createHash('sha256').update(canonicalJson(terms), 'utf8').digest('hex');
+}
+
+/** Seconds on the contract, `Date` in AgentAudition. Zero means "not set", not 1970. */
+const atSecond = (v: unknown): Date => new Date(asNumber(v) * 1000);
+
+export function decodeDispute(
+  disputeId: number,
+  raw: unknown,
+  marketplaceDomain: string | undefined,
+): DisputeRecord {
+  const urls = asList(field(raw, 'sources')).map((u) => asString(u));
+  const classes = asList(field(raw, 'source_class')).map((c) => asString(c));
+  const sources: EvidenceSource[] = urls.map((url, i) => ({
+    url,
+    /**
+     * The contract's own classification is authoritative; this recomputes only
+     * where the contract did not say.
+     *
+     * Re-deriving a class the contract already assigned would let AgentAudition's view
+     * of who owns a source diverge from the one the ruling was made under -
+     * and AgentAudition is the party with the most to gain from the answer being
+     * `independent`.
+     */
+    origin:
+      (classes[i] as EvidenceSource['origin']) ??
+      classifyEvidence(url, marketplaceDomain === undefined ? {} : { marketplaceDomain }),
+  }));
+
+  const verdictJson = asString(field(raw, 'verdict'));
+  return {
+    disputeId,
+    // Back to AgentAudition's own id: the chain stores `<registrar>/<id>`, and every
+    // caller above this line - routes, links, the hire store - knows only the
+    // second half.
+    hireId: hireIdOf(asString(field(raw, 'hire_id'))),
+    ground: GROUNDS[asString(field(raw, 'ground'))] ?? 'delivery',
+    state: STATES[asString(field(raw, 'state'))] ?? 'open',
+    claimant: asString(field(raw, 'claimant')) as Address,
+    // Falls back to the claimant for a dispute opened before the field existed,
+    // where "filed by the client themselves" is the only thing it could mean.
+    onBehalfOf: (asString(field(raw, 'on_behalf_of')) ||
+      asString(field(raw, 'claimant'))) as Address,
+    respondent: asString(field(raw, 'respondent')) as Address,
+    criteria: asList(field(raw, 'criteria')).map((c) => asString(c)),
+    sources,
+    bond: asBigInt(field(raw, 'bond')),
+    extensions: asNumber(field(raw, 'extensions')),
+    openedAt: atSecond(field(raw, 'opened_at')),
+    answerEndsAt: atSecond(field(raw, 'answer_end')),
+    windowEndsAt: atSecond(field(raw, 'window_end')),
+    verdict: decodeVerdict(verdictJson),
+  };
+}
+
+export function decodeVerdict(json: string): DisputeVerdictRecord | null {
+  if (json === '') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    // A verdict that will not parse is not a reason to fail the page. The
+    // dispute's state is stored separately and is the thing a reader needs.
+    return null;
+  }
+  // `Array.isArray` as well as the null check: `typeof [] === 'object'`, so a
+  // verdict field holding a JSON array would otherwise be read as a record
+  // whose every key is missing, and returned as a confident `unresolved`
+  // ruling over zero criteria. Absence is the honest answer to something this
+  // cannot read.
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+  const v = parsed as Record<string, unknown>;
+  const evidence = (v['evidence'] ?? {}) as Record<string, unknown>;
+  return {
+    ruling: (['upheld', 'dismissed', 'unresolved'] as const).includes(
+      v['ruling'] as 'upheld' | 'dismissed' | 'unresolved',
+    )
+      ? (v['ruling'] as 'upheld' | 'dismissed' | 'unresolved')
+      : 'unresolved',
+    resolvedBy: v['resolved_by'] === 'replay' ? 'replay' : 'model',
+    criteria: asList(v['criteria']).map((c) => ({
+      id: asNumber(field(c, 'id')),
+      status: (['met', 'unmet', 'unresolved'] as const).includes(
+        field(c, 'status') as 'met' | 'unmet' | 'unresolved',
+      )
+        ? (field(c, 'status') as 'met' | 'unmet' | 'unresolved')
+        : 'unresolved',
+      confidence: asNumber(field(c, 'confidence')),
+    })),
+    sourcesReachable: asNumber(v['sources_reachable']),
+    evidence: {
+      independent: asNumber(evidence['independent']),
+      claimant: asNumber(evidence['claimant']),
+      respondent: asNumber(evidence['respondent']),
+      marketplace: asNumber(evidence['marketplace']),
+      unclassified: asNumber(evidence['unclassified']),
+    },
+    observed:
+      typeof v['observed'] === 'object' && v['observed'] !== null
+        ? (v['observed'] as Record<string, unknown>)
+        : null,
+  };
+}

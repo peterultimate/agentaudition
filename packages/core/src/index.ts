@@ -1,0 +1,33 @@
+// Domain vocabulary. No SDK, chain-library, or transport import may appear
+// anywhere in this package — that is what keeps a breaking dependency release
+// a one-file change in @agentaudition/adapters instead of a rewrite.
+
+export * from './types/primitives.js';
+export * from './types/agent.js';
+export * from './types/audition.js';
+export * from './types/catalog.js';
+export * from './types/score.js';
+export * from './types/hire.js';
+export * from './types/envelope.js';
+export * from './types/mandate.js';
+export * from './types/hire-flow.js';
+export * from './types/dispute.js';
+
+export * from './digest.js';
+export * from './redact.js';
+
+export * from './ports/catalog.js';
+export * from './ports/registry.js';
+export * from './ports/wallet.js';
+export * from './ports/payment.js';
+export * from './ports/escrow.js';
+export * from './ports/shadow.js';
+export * from './ports/probe.js';
+export * from './ports/crossref.js';
+export * from './ports/hire-store.js';
+export * from './ports/audition-store.js';
+export * from './ports/position.js';
+export * from './ports/shadow-agent.js';
+export * from './ports/dispute.js';
+export * from './test-registration.js';
+export * from './audition-outcome.js';

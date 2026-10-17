@@ -1,0 +1,266 @@
+import { liveShareBps } from '@agentaudition/core';
+import Link from 'next/link';
+
+import { data } from '@/lib/data/index';
+import { pct } from '@/lib/format';
+import { BuiltOn } from '@/components/BuiltOn';
+
+/**
+ * Rendered per request, not prerendered at build time.
+ *
+ * These pages read the catalog, so prerendering them makes `next build` depend
+ * on a reachable, migrated database - and the build and the database are
+ * independently available in every deployment that matters. CI caught it
+ * first: the same `npm run build` passed without DATABASE_URL and failed with
+ * it, against a database whose migrations had not run yet. On Vercel the same
+ * shape means a brief database blip fails a deploy that had nothing to do with
+ * the database.
+ *
+ * The cost is a handful of queries per request instead of one per minute, which
+ * at this traffic is not a cost. The gain is that the catalog is never stale -
+ * which matters more than it sounds when the thing being judged is whether the
+ * agents are live *now*.
+ */
+export const dynamic = 'force-dynamic';
+
+const STEPS = [
+  {
+    n: '01',
+    h: 'Every listed agent runs in shadow',
+    p: 'A forked BSC node, pinned at a block, seeded with a mirror of a real position. The agent gets an RPC endpoint and the throwaway key holding that position - it can really sign, and it believes it is live. The key controls nothing outside the fork, and the fork is destroyed when the run ends.',
+  },
+  {
+    n: '02',
+    h: 'Its transactions are intercepted, never broadcast',
+    p: 'Each one is executed by the EVM against fork state and recorded with the intent it expressed and the state it produced. Executed, not modelled - and never broadcast. No funds move. Nothing reaches the chain.',
+  },
+  {
+    n: '03',
+    h: 'Ranked against doing nothing, and against its peers',
+    p: 'Same position, same window, every agent in parallel plus a do-nothing baseline. That is a controlled comparison, not a post-hoc delta over a handful of settled jobs.',
+  },
+];
+
+export default async function Home() {
+  const [stats, head, tested] = await Promise.all([
+    data.catalogStats(),
+    data.registryHead(),
+    data.verdictCount(),
+  ]);
+  /**
+   * The share is of what AgentAudition has tested, not of what it has indexed.
+   *
+   * A verdict needs three probes inside six hours; indexing needs one read. So
+   * the two counts diverge as fast as the indexer runs, and dividing by the
+   * larger one published "0.0%" about a registry this same project had
+   * measured at 0.17% by sampling. That number read as a finding about BNB
+   * Chain and was a statement about how far a queue had got.
+   */
+  const live = liveShareBps(stats.verifiedLive, tested);
+
+  return (
+    <>
+      {/* ---------- hero ---------- */}
+      <section className="wrap section">
+        <div className="stack stack-24" style={{ maxWidth: '54rem' }}>
+          <span className="eyebrow">Agents audition before they are hired</span>
+
+          <h1 className="hero-title">
+            Hire agents that have <mark className="mark">already worked</mark> your position.
+          </h1>
+
+          <p className="lead" style={{ maxWidth: '40rem' }}>
+            The agent registries on BNB Smart Chain are mostly dead listings and bought reviews.
+            AgentAudition ignores both. It runs every listed agent against replayed history and against a
+            real position, with no funds at risk, and ranks on what the agent{' '}
+            <em>would have done</em>.
+          </p>
+
+          <div className="row" style={{ gap: '1rem' }}>
+            <Link href="/agents" className="btn btn-primary">
+              Browse the catalog
+            </Link>
+            <Link href="/report" className="btn btn-ghost">
+              Read your position’s report →
+            </Link>
+          </div>
+
+          <p className="small">No wallet needed. Paste any BSC address.</p>
+        </div>
+      </section>
+
+      {/*
+        Directly under the hero, because the first question a stranger has
+        about a marketplace of agents is what it actually runs on.
+      */}
+      <BuiltOn />
+
+      {/* ---------- measured, not asserted ---------- */}
+      <section className="wrap section-tight">
+        <div className="statgrid">
+          {/*
+            Two different numbers, and conflating them is the one mistake this
+            block cannot make. `head` is how many agents the registry holds;
+            `stats.registered` is how many of them AgentAudition has indexed, which is
+            smaller because the indexer walks newest-first inside a storage
+            budget. The cell below used to print the second under the first's
+            label, which both understated the registry by two orders of
+            magnitude and made every ratio after it read against the wrong
+            denominator.
+          */}
+          <div className="statcell">
+            <div className="statnum">{head === null ? '-' : head.toLocaleString()}</div>
+            <div className="statlabel">Agents in the BSC registry</div>
+          </div>
+          <div className="statcell">
+            <div className="statnum">{stats.registered.toLocaleString()}</div>
+            <div className="statlabel">Indexed by AgentAudition, newest first</div>
+          </div>
+          <div className="statcell">
+            <div className="statnum">{stats.withResolvableCard.toLocaleString()}</div>
+            <div className="statlabel">With a resolvable agent card</div>
+          </div>
+          <div className="statcell">
+            <div className="statnum">{stats.verifiedLive.toLocaleString()}</div>
+            <div className="statlabel">
+              <Link href="/registry" style={{ color: 'inherit' }}>
+                Verified live - {pct(live)} of the {tested.toLocaleString()} tested →
+              </Link>
+            </div>
+          </div>
+        </div>
+        <p className="tiny" style={{ marginTop: '0.85rem' }}>
+          AgentAudition’s own measurement, recomputed every tick - not a figure quoted from a paper. The
+          registry is walked newest first, so the indexed slice is the live end of it. An agent
+          counts as tested once it has answered, or failed to, three times; it counts as live only
+          on evidence from the last six hours. Indexing outruns probing, so the share above is of
+          the tested set rather than of everything indexed, and it understates: an agent that is up
+          but overdue for a probe is in the denominator and not the numerator.
+        </p>
+      </section>
+
+      {/* ---------- the problem ---------- */}
+      <section className="wrap section">
+        <div className="slab on-dark stack stack-32">
+          <span className="eyebrow">The problem</span>
+          <h2 className="h2" style={{ maxWidth: '30rem' }}>
+            A marketplace that sorts by star rating ships a directory of dead agents ranked by
+            noise.
+          </h2>
+
+          <div className="grid grid-3">
+            {[
+              ['~4%', 'of registered agents on BSC have a live service endpoint'],
+              ['~59%', 'of reviewers show coordinated Sybil behaviour'],
+              ['~78%', 'of rated agents have no valid feedback once those are removed'],
+            ].map(([n, t]) => (
+              <div key={n} className="stack stack-8">
+                <div
+                  style={{
+                    fontSize: 'clamp(2.2rem, 6vw, 3rem)',
+                    fontWeight: 700,
+                    letterSpacing: '-0.04em',
+                  }}
+                >
+                  {n}
+                </div>
+                <p className="small">{t}</p>
+              </div>
+            ))}
+          </div>
+
+          <hr className="rule" />
+          <p className="small">
+            Measured across the live ERC-8004 ecosystem through May 2026 -{' '}
+            <a href="https://arxiv.org/abs/2606.26028" style={{ color: 'inherit' }}>
+              arXiv 2606.26028
+            </a>
+            . Reputation is not comparable across agents, feedback rarely links to a verifiable
+            transaction, and manipulation costs almost nothing.
+          </p>
+        </div>
+      </section>
+
+      {/* ---------- mechanism ---------- */}
+      <section className="wrap section">
+        <div className="stack stack-48">
+          <div className="stack stack-16" style={{ maxWidth: '44rem' }}>
+            <span className="eyebrow">The mechanism</span>
+            <h2 className="h2">Auditions cost compute, not users.</h2>
+            <p className="lead">
+              A dense track record on day one with zero paying customers, and a controlled
+              comparison rather than a noisy delta over a handful of jobs.
+            </p>
+          </div>
+
+          <div className="grid grid-3">
+            {STEPS.map((s) => (
+              <div key={s.n} className="card stack stack-12">
+                <span className="mono small">{s.n}</span>
+                <h3 className="h4">{s.h}</h3>
+                <p className="body">{s.p}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- the absences ---------- */}
+      <section className="wrap section">
+        <div className="stack stack-32">
+          <div className="stack stack-16" style={{ maxWidth: '44rem' }}>
+            <span className="eyebrow">What AgentAudition refuses to do</span>
+            <h2 className="h2">
+              The same measurement that produces the ranking produces the constraint.
+            </h2>
+          </div>
+
+          <div className="stack stack-16">
+            {[
+              [
+                'AgentAudition cannot list an agent that has never worked.',
+                'Every listing carries an audition record or is shown, explicitly, as having none. There is no third state.',
+              ],
+              [
+                'You cannot hire on a claim or a review.',
+                'Only on what the agent already did to a position shaped like yours, against a do-nothing baseline, over a window we name.',
+              ],
+              [
+                'A hired agent cannot exceed your cap - or do anything it did not do in audition.',
+                'Every action the agent proposes is checked against the envelope it established while auditioning, and against what the hire has already spent. Both bounds are enforced and the verdict is recorded; signing is not wired on this deployment, and no key exists to sign with.',
+              ],
+            ].map(([h, p]) => (
+              <div key={h} className="card stack stack-8">
+                <p className="quote">{h}</p>
+                <p className="body">{p}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="small">
+            A spend cap answers <em>how much</em>. The gate answers <em>what kind of thing</em> -
+            and it is derived from measured evidence rather than guessed at in a checkout form.
+          </p>
+        </div>
+      </section>
+
+      {/* ---------- cta ---------- */}
+      <section className="wrap section">
+        <div
+          className="slab on-dark stack stack-24"
+          style={{ textAlign: 'center', alignItems: 'center' }}
+        >
+          <h2 className="h2" style={{ maxWidth: '26rem' }}>
+            See what an agent would have done with your money.
+          </h2>
+          <p className="lead" style={{ maxWidth: '32rem' }}>
+            Paste a BSC address. No connection, no signature, no listing fee.
+          </p>
+          <Link href="/report" className="btn btn-primary">
+            Read the report
+          </Link>
+        </div>
+      </section>
+    </>
+  );
+}

@@ -1,0 +1,299 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { createHire } from '@/lib/hire/actions';
+
+/**
+ * The consent steps arrive as props rather than being imported from
+ * `@agentaudition/core`.
+ *
+ * That package is the domain, and the domain reaches for `node:crypto` to hash
+ * mandates and chain the decision trace - which cannot be bundled for a
+ * browser. Passing the steps down from the server component keeps one
+ * definition (the server still reads CONSENT_STEPS from core) without dragging
+ * Node built-ins into the client bundle.
+ */
+export interface ConsentStepView {
+  readonly id: string;
+  readonly title: string;
+  readonly prompt: string;
+}
+
+export interface HireCheckoutProps {
+  readonly chain: string;
+  readonly tokenId: string;
+  readonly agentName: string;
+  readonly category: string;
+  readonly auditionSummary: string;
+  readonly suggestedAllowlist: readonly string[];
+  readonly price: number;
+  readonly steps: readonly ConsentStepView[];
+  /** True when escrow settles on the ERC-8183 kernel rather than in memory. */
+  readonly escrowOnChain: boolean;
+  /** Symbol of the token this deployment actually settles in. */
+  readonly settlementSymbol: string;
+}
+
+/**
+ * Amounts carry the symbol this deployment settles in, not a constant.
+ *
+ * "USDT" was hardcoded while the ERC-8183 kernel escrows $U, so with real
+ * escrow on, every number on this page named a token the hire would be refused
+ * for using.
+ */
+const amount = (n: number, symbol: string) => `${n.toFixed(2)} ${symbol}`;
+
+export function HireCheckout(props: HireCheckoutProps) {
+  const [done, setDone] = useState<string[]>([]);
+  const [totalCap, setTotalCap] = useState(50);
+  const [perTxCap, setPerTxCap] = useState(10);
+  const [maxActions, setMaxActions] = useState(20);
+  const [expiryHours, setExpiryHours] = useState(24);
+  const [allowlist, setAllowlist] = useState(props.suggestedAllowlist.join('\n'));
+  const [taskSpec, setTaskSpec] = useState('');
+
+  // Generated once per checkout. A double-submit, a refresh, or a flaky
+  // connection reaches the same hire instead of paying twice.
+  const idempotencyKey = useMemo(
+    // crypto.randomUUID in the browser: the key is namespaced by owner on the
+    // server, but it should not be predictable to begin with.
+    () =>
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? `web_${crypto.randomUUID()}`
+        : `web_${Date.now()}_${Math.floor(Math.random() * 1e9)}`,
+    [],
+  );
+
+  const current = props.steps.find((s) => !done.includes(s.id))?.id ?? null;
+  const confirm = (s: string) => setDone((d) => (d.includes(s) ? d : [...d, s]));
+  const reopen = (s: string) => setDone((d) => d.slice(0, d.indexOf(s)));
+
+  const allowCount = allowlist.split(/[\s,]+/).filter((a) => /^0x[a-fA-F0-9]{40}$/.test(a)).length;
+
+  return (
+    <form action={createHire} className="stack stack-16">
+      <input type="hidden" name="chain" value={props.chain} />
+      <input type="hidden" name="tokenId" value={props.tokenId} />
+      <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+      <input type="hidden" name="price" value={props.price} />
+      <input type="hidden" name="totalCap" value={totalCap} />
+      <input type="hidden" name="perTxCap" value={perTxCap} />
+      <input type="hidden" name="maxActions" value={maxActions} />
+      <input type="hidden" name="expiryHours" value={expiryHours} />
+      <input type="hidden" name="allowlist" value={allowlist} />
+      <input type="hidden" name="taskSpec" value={taskSpec} />
+      {/*
+        The confirmations the user actually gave, in the order they gave them.
+        Submitted rather than assumed: the server used to hardcode a complete
+        list, which made `consentComplete` unfailable and the whole checklist
+        decorative. It is the one control here that a user can watch working,
+        so it has to actually be the thing that is checked.
+      */}
+      {done.map((step) => (
+        <input key={step} type="hidden" name="consent" value={step} />
+      ))}
+
+      {props.steps.map(({ id: step, title, prompt }, i) => {
+        const state = done.includes(step) ? 'done' : step === current ? 'current' : 'upcoming';
+        return (
+          <section key={step} className="step" data-state={state}>
+            <header className="step-head">
+              <span className="step-num" aria-hidden="true">
+                {state === 'done' ? '✓' : i + 1}
+              </span>
+              <div className="stack stack-4" style={{ minWidth: 0 }}>
+                <h3 className="h4">{title}</h3>
+                <p className="tiny">{prompt}</p>
+              </div>
+              {state === 'done' ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => reopen(step)}>
+                  Change
+                </button>
+              ) : null}
+            </header>
+
+            {state === 'current' ? (
+              <div className="step-body stack stack-16">
+                {step === 'reviewed-audition' ? (
+                  <>
+                    <p className="body">{props.auditionSummary}</p>
+                    <p className="small">
+                      This record is also the bound: a hired agent cannot do anything it did not do
+                      here. Fixed at the moment you hire.
+                    </p>
+                  </>
+                ) : null}
+
+                {step === 'set-spend-cap' ? (
+                  <div className="grid grid-3">
+                    <Field label="Total ceiling" hint="across the whole hire">
+                      <input
+                        className="field"
+                        type="number"
+                        min={1}
+                        value={totalCap}
+                        onChange={(e) => setTotalCap(Number(e.target.value))}
+                      />
+                    </Field>
+                    <Field label="Per transaction" hint="largest single action">
+                      <input
+                        className="field"
+                        type="number"
+                        min={1}
+                        value={perTxCap}
+                        onChange={(e) => setPerTxCap(Number(e.target.value))}
+                      />
+                    </Field>
+                    <Field label="Max actions" hint="stops an in-cap loop">
+                      <input
+                        className="field"
+                        type="number"
+                        min={1}
+                        value={maxActions}
+                        onChange={(e) => setMaxActions(Number(e.target.value))}
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+
+                {step === 'set-allowlist' ? (
+                  <>
+                    <Field
+                      label="Contracts it may touch"
+                      hint="one address per line; anything else is refused"
+                    >
+                      <textarea
+                        className="field"
+                        rows={4}
+                        style={{
+                          borderRadius: 'var(--r-sm)',
+                          fontFamily: 'ui-monospace, monospace',
+                          fontSize: '0.85rem',
+                        }}
+                        value={allowlist}
+                        onChange={(e) => setAllowlist(e.target.value)}
+                      />
+                    </Field>
+                    <p className="small">
+                      {allowCount} valid address{allowCount === 1 ? '' : 'es'}. Pre-filled from the
+                      contracts this agent actually used in audition.
+                    </p>
+                  </>
+                ) : null}
+
+                {step === 'set-expiry' ? (
+                  <>
+                    <Field label="Authority ends in" hint="hours from now">
+                      <input
+                        className="field"
+                        type="number"
+                        min={1}
+                        value={expiryHours}
+                        onChange={(e) => setExpiryHours(Number(e.target.value))}
+                      />
+                    </Field>
+                    <Field label="What you want done" hint="recorded with the escrow job">
+                      <input
+                        className="field"
+                        value={taskSpec}
+                        onChange={(e) => setTaskSpec(e.target.value)}
+                        placeholder="keep my Venus health factor above 1.5"
+                      />
+                    </Field>
+                  </>
+                ) : null}
+
+                {step === 'reviewed-summary' ? (
+                  <div className="stack stack-12">
+                    <div className="tablewrap">
+                      <table className="t">
+                        <tbody>
+                          <tr>
+                            <td>Agent</td>
+                            <td className="num">{props.agentName}</td>
+                          </tr>
+                          <tr>
+                            <td>Price</td>
+                            <td className="num mono">
+                              {amount(props.price, props.settlementSymbol)}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>Total ceiling</td>
+                            <td className="num mono">{amount(totalCap, props.settlementSymbol)}</td>
+                          </tr>
+                          <tr>
+                            <td>Per transaction</td>
+                            <td className="num mono">{amount(perTxCap, props.settlementSymbol)}</td>
+                          </tr>
+                          <tr>
+                            <td>Max actions</td>
+                            <td className="num mono">{maxActions}</td>
+                          </tr>
+                          <tr>
+                            <td>Contracts allowed</td>
+                            <td className="num mono">{allowCount}</td>
+                          </tr>
+                          <tr>
+                            <td>Expires</td>
+                            <td className="num mono">{expiryHours}h from now</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="small">
+                      Every bound above, as one decision. Nothing is signed and no escrow opens
+                      until you confirm here - and you can revoke at any time afterwards.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div>
+                  <button type="button" className="btn btn-primary" onClick={() => confirm(step)}>
+                    {step === 'reviewed-summary' ? 'Confirm all bounds' : 'Confirm and continue'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+
+      <div className="card stack stack-12">
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={current !== null}
+          style={current !== null ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+        >
+          {current === null
+            ? `Hire ${props.agentName}`
+            : `Complete all ${props.steps.length} steps to hire`}
+        </button>
+        <p className="tiny">
+          {props.escrowOnChain
+            ? 'Escrow settles on chain through the ERC-8183 kernel. Payment is still simulated.'
+            : 'Settlement is simulated here. The mandate, consent, decision trace and both bounds are real.'}
+        </p>
+      </div>
+    </form>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  readonly label: string;
+  readonly hint: string;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <label className="stack stack-4">
+      <span className="h4">{label}</span>
+      <span className="tiny">{hint}</span>
+      {children}
+    </label>
+  );
+}

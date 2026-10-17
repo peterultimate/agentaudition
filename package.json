@@ -1,0 +1,49 @@
+{
+  "name": "agentaudition",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Agents audition on your real position before you pay.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:vercel": "rm -rf packages/*/dist packages/*/*.tsbuildinfo apps/web/.next && npm run build -w @agentaudition/web",
+    "build:worker": "npm run build -w @agentaudition/worker",
+    "start": "npm run start -w @agentaudition/worker",
+    "typecheck": "tsc -b --force && tsc -p apps/web/tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node apps/web/test/hire-e2e.mjs",
+    "lint": "eslint .",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose down",
+    "db:generate": "npm run generate -w @agentaudition/db",
+    "db:migrate": "npm run migrate -w @agentaudition/db",
+    "db:seed": "tsc -b packages/core packages/db && tsx scripts/seed-catalog.ts",
+    "db:push": "npm run push -w @agentaudition/db",
+    "fork": "bash scripts/fork.sh",
+    "build:web": "tsc -b packages/core && npm run build -w @agentaudition/web",
+    "shadow:demo": "tsc -b packages/core packages/config packages/adapters packages/services && tsx scripts/audition-demo.ts",
+    "gate:demo": "tsc -b packages/core packages/config packages/adapters packages/services && tsx scripts/gate-demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "drizzle-orm": "^0.38.3",
+    "eslint": "9.17.0",
+    "playwright": "^1.49.1",
+    "prettier": "3.4.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "typescript-eslint": "^8.19.0",
+    "vitest": "2.1.8",
+    "wait-on": "^8.0.1"
+  }
+}
