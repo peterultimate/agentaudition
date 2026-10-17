@@ -9,6 +9,7 @@ import { ConnectWallet } from '@/components/ConnectWallet';
 const LINKS = [
   ['Catalog', '/agents'],
   ['Your report', '/report'],
+  ['Presentation demos', '/demos'],
   ['Registry health', '/registry'],
   ['Advantage report', '/advantage'],
   ['Your hires', '/hires'],
@@ -73,7 +74,7 @@ export function Nav() {
           <div className="nav-links" ref={menuRef}>
             <button
               type="button"
-              className="nav-menu-btn"
+              className="btn btn-outline btn-sm nav-menu-btn"
               onClick={() => setMenuOpen((value) => !value)}
               aria-expanded={menuOpen}
               aria-haspopup="menu"

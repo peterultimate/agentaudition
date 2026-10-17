@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { formatBaseUnits, looksLikeTestRegistration, type LivePosition } from '@agentaudition/core';
 import { data, isLiveData } from '@/lib/data/index';
+import { DEMO_REPORT_ADDRESS } from '@/lib/demo/constants';
 import { requestReport } from '@/lib/report/actions';
+import { currentOwnerReadOnlyFull } from '@/lib/hire/owner';
 import { CATEGORY_LABEL, usd, agentHref } from '@/lib/format';
 
 export const metadata = {
@@ -10,7 +12,7 @@ export const metadata = {
     'Paste any BSC address and see what each agent would have done with that position. No wallet needed.',
 };
 
-const EXAMPLE = '0x7a16ff8270133f063aab6c9977183d9e72835428';
+const EXAMPLE = DEMO_REPORT_ADDRESS;
 
 export default async function ReportPage({
   searchParams,
@@ -18,6 +20,7 @@ export default async function ReportPage({
   readonly searchParams: Promise<{ readonly address?: string }>;
 }) {
   const { address } = await searchParams;
+  const owner = await currentOwnerReadOnlyFull();
   const result = address ? await data.reportForAddress(address.trim()) : null;
   const report = result?.status === 'ok' ? result.report : null;
   const invalid = result?.status === 'invalid-address';
@@ -91,6 +94,16 @@ export default async function ReportPage({
             Read the report
           </button>
         </form>
+
+        {owner?.kind === 'demo' ? (
+          <div className="card stack stack-8">
+            <p className="quote">Demo wallet connected.</p>
+            <p className="body">
+              The presentation path is already seeded for <span className="mono break">{DEMO_REPORT_ADDRESS}</span>.
+              You can also paste another BSC address to read a different position.
+            </p>
+          </div>
+        ) : null}
 
         {invalid ? (
           <div className="card stack stack-8">

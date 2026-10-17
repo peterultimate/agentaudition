@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { hireStore, hiresAreDurable } from '@/lib/hire/runtime';
-import { currentOwnerReadOnly } from '@/lib/hire/owner';
+import { currentOwnerReadOnlyFull } from '@/lib/hire/owner';
+import { startDemoWallet } from '@/lib/hire/wallet';
 import { formatBaseUnits, isAuthorityLive, isStalled, remaining } from '@agentaudition/core';
 
 export const metadata = { title: 'Your hires - AgentAudition' };
@@ -15,8 +16,8 @@ const STATE_BADGE: Record<string, string> = {
 
 export default async function HiresPage() {
   // Null until this browser has hired: an empty list is the truth, not an error.
-  const owner = await currentOwnerReadOnly();
-  const hires = owner === null ? [] : await hireStore().listByOwner(owner);
+  const owner = await currentOwnerReadOnlyFull();
+  const hires = owner === null ? [] : await hireStore().listByOwner(owner.address);
   // Said, not assumed. This was exported as "surfaced in the UI" and read by
   // nothing, so a deployment holding hires in memory looked identical to one
   // that persists them right up until a restart lost them.
@@ -32,7 +33,13 @@ export default async function HiresPage() {
             Every hire carries the bounds you set, the headroom remaining, and a decision trace that
             cannot be edited after the fact. Revoke is available from any live state.
           </p>
-          {durable ? null : (
+          {owner?.kind === 'demo' ? (
+            <p className="notice notice-ok" role="status">
+              Demo wallet connected. These hires were seeded for the presentation and still use the
+              real hire store and trace format.
+            </p>
+          ) : null}
+          {durable || owner?.kind === 'demo' ? null : (
             <p className="notice notice-warn" role="status">
               This deployment has no database configured, so hires are held in memory and will be
               lost when the server restarts.
@@ -48,6 +55,11 @@ export default async function HiresPage() {
                 Browse the catalog
               </Link>
             </div>
+            <form action={startDemoWallet}>
+              <button type="submit" className="btn btn-outline btn-sm">
+                Use demo wallet and seed the demo app
+              </button>
+            </form>
             {/* Read from the runtime, not asserted.
                 This line was hardcoded to the in-memory case and stayed that
                 way after the Postgres store was wired, so a deployment with a
@@ -57,7 +69,9 @@ export default async function HiresPage() {
                 understates itself is still a deployment saying something
                 untrue about what it does. */}
             <p className="tiny">
-              {hiresAreDurable()
+              {owner?.kind === 'demo'
+                ? 'These demo hires were seeded for the presentation and use the same hire store shape, bounds, and trace format as the live flow.'
+                : hiresAreDurable()
                 ? 'Hires are stored in Postgres: they survive restarts, and the bounds you set stay enforceable until they expire or you revoke them.'
                 : 'No database is configured on this deployment, so hires live in memory and a cold start clears them. `@agentaudition/db` implements the same store interface against Postgres.'}
             </p>

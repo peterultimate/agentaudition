@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { connectWallet, disconnect, walletChallenge, walletState } from '@/lib/hire/wallet';
+import {
+  connectDemoWallet,
+  connectWallet,
+  disconnect,
+  walletChallenge,
+  walletState,
+} from '@/lib/hire/wallet';
 
 /**
  * Connect a wallet so an identity outlives the browser it was made in.
@@ -34,7 +40,7 @@ const injected = (): Eip1193 | null => {
 
 const short = (a: string): string => `${a.slice(0, 6)}...${a.slice(-4)}`;
 
-type Kind = 'session' | 'wallet' | null;
+type Kind = 'session' | 'wallet' | 'demo' | null;
 
 export function ConnectWallet() {
   const router = useRouter();
@@ -97,11 +103,28 @@ export function ConnectWallet() {
     }
   }
 
-  if (kind === 'wallet' && address !== null) {
+  async function onDemoConnect(): Promise<void> {
+    setError(null);
+    start(() => {
+      void connectDemoWallet().then((result) => {
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        void refresh();
+        router.refresh();
+      });
+    });
+  }
+
+  if ((kind === 'wallet' || kind === 'demo') && address !== null) {
     return (
-      <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
-        <span className="badge badge-live mono" style={{ fontSize: '0.7rem' }}>
-          {short(address)}
+      <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span
+          className={kind === 'demo' ? 'badge badge-plain mono' : 'badge badge-live mono'}
+          style={{ fontSize: '0.7rem' }}
+        >
+          {kind === 'demo' ? `demo ${short(address)}` : short(address)}
         </span>
         <button
           type="button"
@@ -125,14 +148,24 @@ export function ConnectWallet() {
 
   return (
     <div className="stack stack-4">
-      <button
-        type="button"
-        className="btn btn-outline btn-sm"
-        disabled={pending}
-        onClick={() => void onConnect()}
-      >
-        {pending ? 'Connecting...' : 'Connect wallet'}
-      </button>
+      <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          disabled={pending}
+          onClick={() => void onConnect()}
+        >
+          {pending ? 'Connecting...' : 'Connect wallet'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          disabled={pending}
+          onClick={() => void onDemoConnect()}
+        >
+          {pending ? 'Loading demo...' : 'Use demo wallet'}
+        </button>
+      </div>
       {error === null ? null : (
         <span className="tiny" role="status">
           {error}

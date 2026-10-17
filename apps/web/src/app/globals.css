@@ -721,24 +721,14 @@ table.t tr:last-child td {
   flex: 0 0 auto;
 }
 .nav-menu-btn {
-  display: inline-flex;
-  align-items: center;
   gap: 0.45rem;
-  min-height: 2.5rem;
-  padding: 0 0.95rem;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.02);
-  font-size: 0.92rem;
-  font-weight: 500;
-  color: var(--muted);
   cursor: pointer;
 }
 .nav-menu-btn:hover,
 .nav-menu-btn[aria-expanded='true'] {
   color: var(--ink);
-  border-color: var(--line-inverse);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--ink);
+  background: transparent;
 }
 .nav-menu-caret {
   transition: transform 0.16s ease;

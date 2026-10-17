@@ -18,7 +18,7 @@
  * for, and they decline loudly until they have one.
  */
 import { AuditionRunner, type ShadowAgent } from '@agentaudition/services';
-import { AnvilForkProvider, controllerFor } from '@agentaudition/adapters';
+import { AnvilForkProvider, controllerFor } from '../packages/adapters/src/shadow/anvil-fork.js';
 import type { AuditionWindow, PositionTemplate } from '@agentaudition/core';
 import {
   createWalletClient,

@@ -24,6 +24,7 @@ const ms = (n: number | null) => (n === null ? '-' : `${(n / 1000).toFixed(1)}s`
  * would defeat its own purpose.
  */
 export default async function AdvantagePage() {
+  const provenance = await data.catalogProvenance();
   const report = await data.advantage();
   const { totals } = report;
 
@@ -39,7 +40,12 @@ export default async function AdvantagePage() {
             Each figure comes from a recorded audition, and the replay hash on each row lets you
             re-run it.
           </p>
-          {isLiveData ? null : (
+          {isLiveData ? null : provenance === 'fixtures' ? (
+            <p className="notice notice-warn" role="status">
+              This deployment has no database configured, so this page is showing seeded demo tasks
+              generated from the fixture runs rather than worker-recorded auditions.
+            </p>
+          ) : (
             <p className="notice notice-warn" role="status">
               This deployment has no database configured, so there are no recorded auditions to
               report on.

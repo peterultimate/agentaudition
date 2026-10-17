@@ -14,7 +14,9 @@
  * unwind and nothing for a reorg to resurrect. It simply never happened.
  */
 import { AuditionRunner, type ShadowAgent } from '@agentaudition/services';
-import { AnvilForkProvider, controllerFor, startAnvil, startGatedSession } from '@agentaudition/adapters';
+import { AnvilForkProvider, controllerFor } from '../packages/adapters/src/shadow/anvil-fork.js';
+import { startAnvil } from '../packages/adapters/src/shadow/anvil-process.js';
+import { startGatedSession } from '../packages/adapters/src/shadow/gated-session.js';
 import {
   deriveEnvelope,
   type AuditionWindow,

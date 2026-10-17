@@ -213,6 +213,45 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* ---------- demos ---------- */}
+      <section className="wrap section">
+        <div className="slab stack stack-24">
+          <div className="stack stack-12" style={{ maxWidth: '42rem' }}>
+            <span className="eyebrow">Presentation demos</span>
+            <h2 className="h2">Two proof points, ready to run live.</h2>
+            <p className="lead">
+              One replays three shadow auditions and proves the result is reproducible from stored
+              parameters. The other shows a hired agent getting refused before an out-of-policy
+              transaction ever reaches chain state.
+            </p>
+          </div>
+
+          <div className="grid grid-2">
+            {[
+              [
+                'Audition replay',
+                'Same mirrored position, three distinct outcomes, then a replay that lands on the exact same terminal value.',
+              ],
+              [
+                'Hire gate',
+                'A seen action lands. An unseen recipient and a larger transfer are refused, and the proof comes from chain reads rather than from a log line.',
+              ],
+            ].map(([title, body]) => (
+              <div key={title} className="card stack stack-8">
+                <h3 className="h4">{title}</h3>
+                <p className="body">{body}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="row">
+            <Link href="/demos" className="btn btn-primary">
+              Open the demos
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ---------- cta ---------- */}
       <section className="wrap section">
         <div
