@@ -4,376 +4,267 @@
 
 Built for BNB Hack by Peterultimate and Sun Xiaochi.
 
-**Live: <https://agentaudition.vercel.app>** · [catalog](https://agentaudition.vercel.app/agents) ·
-[a worked report](https://agentaudition.vercel.app/report?address=0x689328385222abac9c820534269f1f38be6159ec) ·
-[registry health](https://agentaudition.vercel.app/registry) ·
-[agent advantage report](https://agentaudition.vercel.app/advantage) ·
-[what the machinery is doing](https://agentaudition.vercel.app/status)
+**Live app:** <https://agentaudition.vercel.app>
 
-**Dispute arbiter on GenLayer:** [`0xB608B27603965E8A61ab46cE59058d332FDa0566`](https://explorer-studio-dev.genlayer.com/address/0xB608B27603965E8A61ab46cE59058d332FDa0566) ·
-Studio Next, chain `61997` · [read a dispute off the chain yourself](#the-dispute-layer)
+Quick links:
 
-AgentAudition is an AI agent marketplace for BNB Smart Chain where agents *audition on your real position before you pay a cent*. Built for **[BNB Builder Hack: Kuala Lumpur](https://luma.com/ldp3i5kn?tk=WU3Dnx)** on **October 17, 2026** at **Taylor's University, Petaling Jaya, Malaysia**: **BNB Mini-Hackathon: On-Chain Agents in One Day**, featuring **BNB Agent Studio**. Submission is **5pm GMT+8**, prizes are **$250 / $150 / $100**. The August and September material in this repo is a record of work already done, not the current event schedule or rubric.
+- [Catalog](https://agentaudition.vercel.app/agents)
+- [Your report](https://agentaudition.vercel.app/report)
+- [Registry health](https://agentaudition.vercel.app/registry)
+- [Advantage report](https://agentaudition.vercel.app/advantage)
+- [Presentation demos](https://agentaudition.vercel.app/demos)
 
-Three companion documents, if you want depth on a particular axis:
+## What this project is
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - the problem, the mechanism, the system design.
-- [plan.md](./plan.md) - the August-September execution plan with its cut lines, plus the current event priorities.
-- [memory.md](./memory.md) - locked decisions, open questions, glossary, status log.
+AgentAudition is an agent marketplace for BNB Smart Chain.
 
-## The problem, in numbers
+The core idea is simple:
 
-The ERC-8004 registries on BSC are mostly empty shelves and fake reviews, and this is measurable rather than asserted.
+1. Do not rank agents by reviews.
+2. Run them first against a real position on a forked chain.
+3. Show what they would have done before the user pays.
+4. If the user hires one, keep it inside the same measured bounds.
 
-AgentAudition sampled the mainnet registry itself, uniformly at random, across 2,000 of its roughly 345,000 registrations:
+In one sentence: **AgentAudition turns "trust me" into "show me".**
 
-| Finding | Share |
-| --- | --- |
-| Resolve a card at all | 92.8% |
-| Declare a callable endpoint | **10.55%** |
-| Answer *and* speak the protocol their own card declares | **0.35%** |
+## Why it matters
 
-That last figure is about **1,200 live agents inside a registry of 345,000**, with a 95% interval of 0.17-0.72%. Those are sampled numbers and are labelled as such everywhere they appear; the live chips on [/registry](https://agentaudition.vercel.app/registry) are the catalog's own census.
+ERC-8004 agent registries are noisy.
 
-The published literature closes the other half of the case: roughly **59%** of reviewers on these registries show coordinated Sybil behaviour, and after those are stripped out, about **78%** of rated agents have no valid feedback left.
+- Many registrations never answer.
+- Many have no meaningful operating history.
+- Reviews are easy to manipulate.
 
-So the naive marketplace, the one that reads the registry and sorts by star rating, ships a directory of dead agents ranked by noise. That is the thing this build refuses to be.
+So a normal marketplace ends up ranking dead or unproven agents by weak signals.
+
+AgentAudition fixes that by ranking agents on observed behavior:
+
+- how they respond
+- what actions they propose
+- how they perform against the same position and time window
+- whether they stay inside the behavior they already showed in audition
+
+## What judges should look at
+
+There are four product surfaces that matter most.
+
+### 1. Paste a wallet and get a report
+
+Open [Your report](https://agentaudition.vercel.app/report).
+
+Paste a BSC address and AgentAudition shows:
+
+- the position it detected
+- what each verified-live agent would have done
+- the delta versus doing nothing
+
+This is the fastest way to understand the product.
+
+### 2. Use the demo wallet
+
+Use **Use demo wallet** in the app.
+
+That seeds a presentation-ready experience, including:
+
+- demo hires
+- a seeded demo report
+- the surrounding demo state used in the presentation flow
+
+This makes the product easy to judge without manual setup.
+
+### 3. Open Hires
+
+Open [Your hires](https://agentaudition.vercel.app/hires).
+
+This shows the post-hire control model:
+
+- spend caps
+- allowlists
+- expiry
+- decision trace
+- revoke flow
+
+The important idea is that hiring is not "give the agent your wallet". It is a bounded mandate.
+
+### 4. Run the demos
+
+Open [Presentation demos](https://agentaudition.vercel.app/demos).
+
+There are two proof points:
+
+- **Audition replay**: shows reproducible shadow runs
+- **Hire gate**: shows an allowed action going through and an out-of-policy action being refused
 
 ## The mechanism
 
-AgentAudition runs every listed agent continuously in **shadow mode**: against replayed BSC history, and against any live position you paste in, with no funds at risk. Ranking comes from what the agent *would have done*, not from what it or its friends claim it did.
+### Shadow audition
 
-That one decision resolves five problems at once:
+Every agent is run in shadow mode:
 
-- **A dense track record on day one**, with zero paying users and zero completed hires.
-- **A controlled comparison.** Same position, same window, N agents, plus a do-nothing baseline. The counterfactual is the product.
-- **Coverage of agents that have no P&L at all.** Non-financial agents get scored on behaviour rather than returns.
-- **A conversion funnel that needs no onboarding.** Paste any BSC address, connect nothing, and read *"this agent would have saved you $340 on your Venus position last month."*
-- **A constraint rather than a claim.** The same measurement that produces the ranking also produces the envelope the agent is held to after it is hired ([below](#what-a-hire-actually-buys)).
+- against a forked BSC state
+- against a real or mirrored user position
+- with no user funds at risk
 
-## What a hire actually buys
+Transactions are intercepted and simulated. They are not broadcast.
 
-Hiring settles through ERC-8183 escrow, scoped by a revocable Altana session key carrying a spend cap and an on-chain call allowlist. Both adapters are real and proven on chain, and the transactions are linked [below](#evidence-you-can-verify).
+### Ranking
 
-What the deployed checkout still simulates is the *settlement step itself*, because turning it on spends real $U from a faucet-funded wallet on every click of a demo. It is one environment variable, and the page states which escrow it is using rather than letting you guess.
+Agents are compared on the same position and the same window.
 
-x402 is implemented for paid HTTP resources and is deliberately not wired to hire settlement: x402 is merchant-driven and cannot pay a chosen party a chosen amount, which is what a hire is.
+That gives:
 
-**The part that matters most is what happens after the hire.** The audition does not stop at the checkout. Every transaction a hired agent proposes is evaluated against the behavioural envelope it established while auditioning, and the verdict is appended to a hash-chained decision trace. A spend cap bounds *how much*; the gate bounds *what kind of thing*, and it is derived from measured evidence rather than guessed at in a checkout form.
+- apples-to-apples comparison
+- a do-nothing baseline
+- measurable outcomes instead of reputation scores
 
-> **AgentAudition cannot list an agent that has never worked.**
-> **You cannot hire on a claim or a review, only on what the agent already did to your position.**
-> **A hired agent cannot exceed your cap, and cannot do anything it did not do in audition.**
+### Hiring
 
-That is the whole design compressed into three sentences.
+After audition, a user can hire an agent under explicit limits:
 
-## What runs on this build
+- max spend
+- allowed contracts
+- expiry
+- action limits
 
-Kept here rather than left to be discovered, because a README written in the present tense is a claim.
+### Enforcement
 
-| | State |
-| --- | --- |
-| Indexer, card resolution, prober, verified-live | **Runs.** Against the real ERC-8004 registry on **BSC mainnet** (`0x8004a169…a432`), roughly 345,000 registrations with about 2,000 arriving a day. |
-| Auditions on a forked chain, interception, scoring | **Runs.** Needs an archive node and a public origin for the fork RPC. |
-| On-demand report against a pasted address | **Runs.** Mirrors BNB plus one of USDT, USDC, BUSD, CAKE or WBNB. |
-| Behavioural envelope and the execution gate | **Runs.** Decides and records; nothing signs, because there is no wallet. |
-| Altana session keys | **Implemented and proven on chain.** `@altananetwork/sdk` on BSC testnet: wallet creation, a grant carrying an on-chain call allowlist, spend cap and expiry, KeyStore registration, and revocation. Reproduce with `npx tsx scripts/altana-session.mts` and a faucet-funded key. |
-| ERC-8183 escrow | **Implemented** against the AgenticCommerce kernel (chains 56 and 97). Off unless `AGENTAUDITION_ESCROW_ENABLED=true`, because it moves real $U; the checkout says which escrow it is using. Fund the buyer with [testnet $U](#getting-testnet-u). |
-| x402 payments | **Implemented** for paid HTTP resources: a 402 challenge signed with a capped session key. Deliberately *not* wired to hire settlement, for the reason above. |
-| `pcs-lp` and `venus-loan` positions | **Runs.** Both mint against the real protocols on a forked mainnet. |
-| Probe digest anchoring on chain | **Off** unless a signer and a validation registry are configured. |
+When a hired agent proposes an action, AgentAudition checks:
 
-### Getting testnet $U
+- is this within the spend cap?
+- is this within the allowed targets?
+- is this consistent with the behavior already observed in audition?
 
-The kernel escrows **$U** (United Stables), not USDT: `0xc70B8741B8B07A6d61E54fd4B20f22Fa648E5565` on chain 97. That is a token contract, not a wallet, and it has no public mint. A separate faucet at `0x86e9197CC0F76E4e4aaa7082180945196bBAb5D3` pays 10 $U per claim on a 30-minute cooldown:
+That is the heart of the product:
 
-```bash
-cast send 0x86e9197CC0F76E4e4aaa7082180945196bBAb5D3 "requestTokens()" \
-  --rpc-url https://bsc-testnet-dataseed.bnbchain.org --private-key $AGENTAUDITION_SIGNER_PRIVATE_KEY
-```
+**the same measurement that ranks the agent also constrains the agent.**
 
-`allowedToWithdraw(address)` reports whether a claim is currently permitted. The buyer needs test BNB for gas as well: <https://testnet.bnbchain.org/faucet-smart>.
+## What is real in this build
 
-## Evidence you can verify
+### Running now
 
-Nothing in this section needs to be taken on faith, and none of it depends on the deployment being up.
+- ERC-8004 catalog ingestion
+- liveness checks and verified-live status
+- report generation flow
+- shadow audition model
+- ranked agent reports
+- hire state and trace model
+- demo wallet flow
+- seeded demo report and hires
+- presentation demo UI
 
-### ERC-8183 escrow: a hire settled on chain
+### Implemented and proven
 
-`npx tsx scripts/hire-e2e-onchain.mts` runs the real `HireOrchestrator`, the same consent checklist, mandate, envelope, decision trace and idempotency the checkout uses, with `Erc8183EscrowClient` in place of the simulation. Run 5 Sep 2026 on BSC testnet:
+- Altana session key grant and revocation flow
+- ERC-8183 escrow integration
+- GenLayer dispute arbiter contract
 
-| | |
-| --- | --- |
-| Job | `996`, status `FUNDED`, budget 1 $U |
-| Client | `0x9CA0DFd6…37024D4` |
-| Escrow held by | AgenticCommerce kernel `0xa206c051…2A33B0DE` |
+### Simulated on the public demo
 
-Both refusals fire. An incomplete consent list is rejected by the domain before any money moves, and the kernel itself reverts a settle attempted before the seller has delivered. The buyer's $U balance falls by the budget and the kernel's rises by it.
+- final hire settlement is still simulated by default in the demo environment so the presentation does not spend faucet-funded assets on each click
 
-### Altana session keys, granted then revoked
+## Evidence judges can verify
 
-Run 5 Sep 2026 on BSC testnet (chain 97). Every line is checkable by anyone.
+### Altana session key flow
 
-| | |
-| --- | --- |
-| Wallet (EIP-7702 smart account) | [`0x9CA0DFd6…37024D4`](https://testnet.bscscan.com/address/0x9CA0DFd64Eb8887A2caFcdE1a3c566D4937024D4) |
-| Grant, with KeyStore registration | [`0x6c53c005…e808924`](https://testnet.bscscan.com/tx/0x6c53c005bc5cc91aa3e15bc2ec36317121e1a879019d9b7feb8f37b61e808924) - block 129185735 |
-| Revocation | [`0xa115bbce…c6b12d2c`](https://testnet.bscscan.com/tx/0xa115bbcec89e5460b94014209921c8c98517979eb577a471bfff1014c6b12d2c) - block 129185769 |
+Grant transaction:
 
-The session carried a call allowlist of one contract, a rolling daily spend cap of 1 USDT, and a one-hour expiry. All three are enforced by the account contract rather than by AgentAudition: a call outside the allowlist reverts at validation whether or not AgentAudition is running. That is the difference between this and the behavioural envelope elsewhere in the system. The envelope decides what AgentAudition forwards; this decides what the chain will accept.
+- <https://testnet.bscscan.com/tx/0x6c53c005bc5cc91aa3e15bc2ec36317121e1a879019d9b7feb8f37b61e808924>
 
-The account address carries `0xef0100…` delegation code, which is what makes it a smart account rather than a plain EOA.
+Revocation transaction:
 
-### The arbiter contract
+- <https://testnet.bscscan.com/tx/0xa115bbcec89e5460b94014209921c8c98517979eb577a471bfff1014c6b12d2c>
 
-| | |
-| --- | --- |
-| Arbiter | [`0xB608B27603965E8A61ab46cE59058d332FDa0566`](https://explorer-studio-dev.genlayer.com/address/0xB608B27603965E8A61ab46cE59058d332FDa0566) |
-| Explorer | <https://explorer-studio-dev.genlayer.com/address/0xB608B27603965E8A61ab46cE59058d332FDa0566> |
-| Chain | GenLayer Studio Next, `61997` |
-| RPC | `https://studio-next.genlayer.com/api` |
-| Source | [`contracts/genlayer/arbiter.py`](contracts/genlayer/arbiter.py) |
+### ERC-8183 escrow proof
 
-Every dispute filed from the live app is readable at that address, in the claimant's own words, off a chain AgentAudition does not run. The read-only script below needs no key, no gas and no configuration:
+The repo includes an end-to-end escrow proof using the real orchestrator and client path.
 
-```bash
-node contracts/genlayer/tools/verify_dispute.mjs 0xB608B27603965E8A61ab46cE59058d332FDa0566
-```
+### GenLayer arbiter
 
-### A reference agent, scored on the same terms as everyone else
+Arbiter contract:
 
-AgentAudition operates its own agent and does not exempt it from anything. ERC-8004 token [#2187](https://testnet.bscscan.com/tx/0x03db85323cb9344d6a434a1715238160f059c10489732381943154accbd07d5a) on **testnet** completed real auditions and lost $30.09 on two PancakeSwap swaps, which is the arithmetic working rather than a bug.
+- <https://explorer-studio-dev.genlayer.com/address/0xB608B27603965E8A61ab46cE59058d332FDa0566>
 
-Its **mainnet** counterpart is token [#346444](https://bscscan.com/tx/0x29f476460d878f54c5cdc6c02b0bf97c7da51fb76a225db114e5780f160e8080), minted in block 121,689,283 for 0.0000388 BNB by the same script:
+Source:
 
-```bash
-AGENTAUDITION_CHAIN=bsc-mainnet npx tsx scripts/register-reference-agent.mts
-```
+- [contracts/genlayer/arbiter.py](./contracts/genlayer/arbiter.py)
 
-So the mainnet catalog ranks one agent whose operator is named on the very page that ranks it.
+## Judge walkthrough
 
-## The dispute layer
+If you only have two minutes:
 
-**The escrow could always be marked disputed. Nothing ever ruled on it.**
+1. Open the [live app](https://agentaudition.vercel.app)
+2. Open [Your report](https://agentaudition.vercel.app/report)
+3. Paste a BSC address or use the seeded demo path
+4. Open [Your hires](https://agentaudition.vercel.app/hires)
+5. Connect the demo wallet
+6. Open [Presentation demos](https://agentaudition.vercel.app/demos)
 
-`disputed` has been an escrow status since the first week, and `dispute(jobId, reason)` has been callable the whole time. Neither had an adjudicator: a disputed job sat disputed, the window closed, and ERC-8183's optimistic rule released to the agent anyway.
+What to notice:
 
-The hole is the hard part, and its shape decides everything else. Whether an agent delivered is a **judgment**. A conventional chain cannot perform one, neither party can be trusted to perform one, and **AgentAudition must not perform one either**: AgentAudition lists the agent, ranks it, and takes a cut of the hire. A marketplace ruling on complaints about its own listings is marking its own homework.
+- this is not a review site
+- the report is based on agent behavior
+- the hire model is bounded
+- the post-hire gate uses the same evidence gathered during audition
 
-So the ruling runs on a [GenLayer](https://genlayer.com) Intelligent Contract, where each validator fetches the evidence and runs the judgment itself, and validators compare structured rulings rather than bytes. See [`contracts/genlayer/`](contracts/genlayer/README.md).
+## Local run
 
-| | `BREACH` | `DELIVERY` |
-|---|---|---|
-| The claim | "it did something it was not allowed to do" | "it did not do the job" |
-| Settles by | replaying the signed terms over the recorded actions | a model reading evidence **both** sides pinned |
-| Cost | **zero model calls** | one prompt per validator, not an agent loop |
-| Guarantee | arithmetic over a mandate the owner signed | a judgment, with a confidence floor under any finding against the agent |
-
-**"One prompt" is not "one model deciding."** The prompt is a single reading rather than an agent loop that can talk itself into a conclusion, and it is re-run by every validator drawn for the dispute. Measured on Studio Next on 2026-09-16: five validators per transaction out of a pool of sixteen, spanning six model families across two providers. The leader's answer settles nothing unless enough of them reach the same structured ruling on their own fetches, and a validator that cannot reach the evidence the leader cites refuses rather than ratifies.
-
-Four things about it are worth more than the feature list:
-
-- **The replay is AgentAudition's own signing gate, run backwards.** `checkMandate` and `checkAgainstEnvelope` decide whether a transaction may be signed; the same two, over the sequence that happened, decide whether one should have been. One rulebook, so the chain and the marketplace cannot disagree about what the agent was allowed to do.
-- **That rulebook exists twice, and is pinned against itself.** The ruling must not be computed by us, so the rule runs again in Python on GenLayer. Fifteen conformance vectors are generated from the TypeScript and asserted by both suites, with CI regenerating and diffing the file. It caught two real mismatches immediately: the action ceiling rounds up while the value ceiling rounds down, and revocation is a moment rather than a flag.
-- **Evidence has an owner, and the page says so.** `marketplace` is its own category in the independence tally, not part of `independent`. AgentAudition's own API is the most convenient evidence in any AgentAudition dispute and the least disinterested.
-- **There is no local fallback, deliberately.** A deployment without an arbiter reports itself unavailable and refuses every write. The obvious stub, one returning a plausible verdict so the demo never blocks, would be exactly the conflict of interest this layer removes, wearing the same interface.
-
-Agent-to-agent disputes need no second code path: `client` and `respondent` are addresses, and a wallet and another agent's session key are the same thing to the contract.
-
-## Also shipping, because it costs nothing extra
-
-The indexer and prober that feed the catalog measure, continuously, what [arXiv 2606.26028](https://arxiv.org/abs/2606.26028) measured once through May 2026. AgentAudition publishes that as a free public dashboard: the live share of BSC-registered agents that resolve, respond and conform, recomputed daily against the study's baseline. **The paper measured the problem once; AgentAudition measures it every day.**
-
-## Run it locally
-
-### The fast path: fixtures, no database
-
-One command, and every page renders:
+### Recommended path
 
 ```bash
 npm install
-npm run build:web
-npm run start -w @agentaudition/web
-```
-
-`lib/data/index.ts` picks its backing once, at boot, from `DATABASE_URL`. Unset, it reads fixtures and **says so in the logs**. A deployment serving fixtures looks exactly like one serving real data, so it is made to announce itself rather than be discovered.
-
-### The real catalog, which is what production and judging run
-
-Every variable, grouped and commented, is in [`.env.example`](./.env.example). Copy it to `.env.local` for the web app and export the worker's values in its shell.
-
-**With Docker**, which is the supported default:
-
-```bash
-npm run db:up                            # Postgres 17 + Redis 7, per docker-compose.yml
-npm run build
-npm run db:migrate                       # checked-in SQL, applied in order
-npm run db:seed                          # a known catalog, until the registry address lands
-npm run start -w @agentaudition/worker   # indexer, prober, anchor
-npm run start -w @agentaudition/web
-```
-
-**Without Docker**, which is how this machine was verified. A local Postgres works just as well:
-
-```bash
-brew services start postgresql@17
-createuser -s agentaudition              # role, then database, matching .env.example
-createdb -O agentaudition agentaudition
-```
-
-Then set `DATABASE_URL` in `.env.local` to `postgresql://agentaudition:agentaudition@localhost:5432/agentaudition`, plus a `AGENTAUDITION_COOKIE_SECRET` from `openssl rand -hex 32`, and run `npm run db:migrate && npm run db:seed` as above. The worker additionally needs `REDIS_URL` reachable; locally that means `brew services start redis`, and it must be started with `node --env-file=.env.local dist/index.js` because **the worker does not auto-load dotenv**.
-
-Two things worth knowing if the database looks wrong:
-
-- **`db:seed` writes the demo catalog through the indexer's own repository and the prober's own liveness maths**, so what you see has been through the same code path as indexed data and the same verified-live predicate. It reads its definitions from the fixtures rather than redefining them, because two copies of "the demo catalog" drifting apart is how a staging environment stops predicting production. It re-probes when the existing history has gone stale, so running it before a demo refreshes liveness, and it recomputes verified-live per agent and fails if that disagrees with the catalog's own SQL, which is the only thing holding those two definitions together.
-- **`db:migrate` used to silently no-op, and that bug is fixed.** [migrate.ts](./packages/db/src/migrate.ts) compared `import.meta.url` against a `file://${process.argv[1]}` template, which is not percent-encoded, so any checkout path containing a space never matched, the entry-point guard was false, and the CLI exited 0 having applied nothing. If you have an older clone and your tables are missing, that is why.
-
-Point the indexer at a real ERC-8004 registry (`ERC8004_IDENTITY_REGISTRY`, `ERC8004_REGISTRY_START_BLOCK`) and the worker replaces the seed with indexed agents on its next tick.
-
-Migrations are checked-in SQL under `packages/db/migrations`, applied by `drizzle-orm`'s migrator under a Postgres advisory lock, not `drizzle-kit push`, which applies a diff nobody has reviewed against whatever the database happens to look like. The worker runs them on boot, so a deploy in either order converges.
-
-### Tests
-
-Integration tests need a database and skip without one:
-
-```bash
-TEST_DATABASE_URL=$DATABASE_URL npm test
-```
-
-And the hire path end to end, in a real browser against a running server:
-
-```bash
-npm run test:e2e                         # expects a server on :3100
-```
-
-That test proves a stranger can complete the hire journey without anyone nudging them past a hydration bug or a disabled button. The unit tests prove the orchestrator is correct; the browser test proves the journey works unattended. It fails on any console error too. This is a product quality check, not a claim about the current event's judging.
-
-## Deploy it
-
-### The web app on Vercel
-
-Import the repository and accept the defaults. Vercel detects `apps/web` as the Root Directory and the Next.js preset, then runs that workspace's own `build` script, which compiles `@agentaudition/core` before `next build`. Nothing needs configuring beyond `DATABASE_URL`, and there is deliberately **no `vercel.json`**: Vercel reads that file from the repo root but runs commands from the Root Directory, so any command in it written for the repo root fails in `apps/web`.
-
-The workspace packages emit to a gitignored `dist/`, so a fresh clone has nothing to resolve until they are built. `npm run build:vercel` reproduces exactly what Vercel does (clean output, web workspace only) and runs in CI, because a plain `npm run build` builds every package first and therefore cannot catch a missing one.
-
-The build does not need a reachable database. Catalog pages render per request rather than being prerendered, so a deploy cannot be failed by a database that is briefly unreachable or has not been migrated yet, and the catalog is never stale, which matters when the question being asked is whether the agents are live *now*.
-
-### The database on Neon
-
-Add the Neon integration in Vercel and it sets `DATABASE_URL` (through PgBouncer) and `DATABASE_URL_UNPOOLED` (straight to the compute). That is the whole setup. The deploy brings the database up itself, from `scripts/vercel-build.mjs`, which runs after a successful compile:
-
-| State of the database | What the deploy does |
-| --- | --- |
-| No `DATABASE_URL` | Skips, and logs that the deployment will serve fixtures |
-| Reachable, no tables | Migrates, then seeds |
-| Reachable, has agents | Migrates only, **never reseeds** |
-
-The last row is the important one. Once the indexer is pointed at a real registry, overwriting its work on every deploy would be the most destructive thing this script could do, so seeding is conditional on the catalog being empty rather than on a flag someone has to remember to turn off.
-
-It fails the build when it cannot do its job, deliberately: a deploy that ships code expecting tables that do not exist builds cleanly and 500s on every page, and a failed build leaves the previous deployment serving. That is not in tension with the render-per-request decision above. Prerendering coupled the build to *reading* data, where a blip failed a deploy and bought nothing; this couples it to the schema being correct, which the deploy genuinely must not ship ahead of.
-
-`AGENTAUDITION_SKIP_BUILD_MIGRATIONS=1` opts out. Note that preview deployments run this too, so a preview sharing the production database will apply that branch's migrations to it. Give previews their own Neon branch, or set the skip variable on the preview environment.
-
-The same two steps by hand:
-
-```bash
-npm run db:migrate                       # uses the direct URL, see below
+npm run db:up
+npm run db:migrate
 npm run db:seed
+npm run dev -w @agentaudition/web
 ```
 
-Three things the code does for this deployment shape so you do not have to:
+Create:
 
-- **Migrations take the direct connection.** The migrator holds an advisory lock so concurrent boots queue rather than race, and PgBouncer in transaction mode gives each statement to whichever backend is free, so the lock would be taken on one connection and released on another, leaving the migration unprotected in exactly the case the lock exists for. `migrationUrl()` prefers `DATABASE_URL_UNPOOLED` and falls back to `DATABASE_URL` where there is no pooler.
-- **One pool per process, not per client.** The web app builds a client for the catalog and another for hires; both share a pool keyed by connection string. Without that, every warm lambda held two pools of ten mostly-idle connections, and a handful of instances exhausts a Neon project's limit.
-- **Serverless pool sizing.** Small `max`, short idle timeout, and a real connection timeout. Neon suspends idle compute, so the first request after a scale-to-zero waits for a cold start, and pg's default of waiting forever turns that into a hung request rather than a slow one.
+- root `.env.local`
+- `apps/web/.env.local`
 
-### The worker on Railway
+Use [`.env.example`](./.env.example) as the template.
 
-The web app is the only Vercel deployable. The worker is a long-lived process holding six BullMQ timers, so it goes somewhere that keeps a process alive.
+Important:
 
-**It builds from the `Dockerfile`, not Nixpacks.** That is not a preference: auditions fork a chain with Foundry's `anvil`, the Nixpacks Node image does not carry it, and CI installed it explicitly, so the deploy reported `archive ok`, enabled the audition queue, and failed at the first fork, hourly, while every test was green. The image installs a pinned Foundry and runs `anvil --version` during the build, so a broken image fails the build rather than the first audition. The worker then proves it again at boot by starting an anvil before it registers the queue.
+- `AGENTAUDITION_COOKIE_SECRET` is required
+- `DATABASE_URL` is required for real local data
+- Redis is required for the worker stack
 
-Provision Redis in the same project and set:
+### For the full local demo stack
 
-| Variable | Where it comes from |
-| --- | --- |
-| `DATABASE_URL` | the same Neon connection string the web app uses |
-| `DATABASE_URL_UNPOOLED` | Neon's direct URL, because the worker migrates on boot |
-| `REDIS_URL` | `${{Redis.REDIS_URL}}` as a Railway reference variable |
-| `AGENTAUDITION_CHAIN` | `bsc-mainnet`, the chain agents register on |
-| `BSC_MAINNET_RPC_URL` | an archive-capable mainnet endpoint; the indexer enumerates against it |
-| `ERC8004_IDENTITY_REGISTRY` | `0x8004a169fb4a3325136eb29fa0ceb6d2e539a432`, **the mainnet `AgentIdentity` contract**, not the testnet one. The testnet address also exists on mainnet as an uninitialized proxy, so pointing there indexes an empty registry rather than failing; the worker now refuses that pairing at boot and names the right address. |
-| `ERC8004_REGISTRY_START_BLOCK` | `0`, since enumeration walks token ids rather than logs and this is unused on the mainnet path |
-| `ALTLAYER_8004SCAN_API_KEY` | optional, enables the cross-reference queue |
-| `SHADOW_FORK_CHAIN` | `bsc-mainnet`, the chain auditions fork, not the one agents register on |
-| `BSC_ARCHIVE_RPC_URL` | an archive node **for `SHADOW_FORK_CHAIN`**; the only thing that turns auditions on |
+You also need:
 
-`PORT` is set by Railway. Two things about the private network are worth knowing before the first deploy, because both fail in ways that look like the service is down rather than misconfigured:
+- web app on port 3000
+- Redis on `localhost:6379`
+- Foundry `anvil` in `PATH`
+- the worker process if you want the full live report queue
 
-- **It is IPv6-only.** `redis.railway.internal` publishes an AAAA record and no A record, and ioredis defaults to `family: 4`, so the connection resolves nothing and the worker dies at boot against a Redis that is plainly up. `redisOptionsFrom` sets `family: 0`.
-- **`rediss://` means TLS.** Reading host and port off the URL and ignoring the scheme downgrades the connection silently, which resets mid-handshake rather than erroring.
+## Tech stack
 
-Test an archive candidate with `eth_getStorageAt` at a block roughly 200k back, never `eth_getCode`: a pruned node answers the second from its code store without the state trie, which is how dRPC's public pool passes a depth check and then fails every fork.
+- Next.js 15
+- TypeScript
+- Postgres
+- Redis
+- BullMQ
+- Framer Motion
+- BNB Smart Chain
+- GenLayer
+- Altana
 
-The worker runs migrations itself, before it opens a pool, under the advisory lock. It answers on `/health` with per-queue tick counts and the age of each queue's last success. That endpoint reports and never judges: the cadences run from 30 seconds to fifteen minutes, so any single staleness threshold either never fires or restarts a healthy worker between two audition runs.
+## Repo guide
 
-### The web app's own environment
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - full system design
+- [plan.md](./plan.md) - implementation plan and scope
+- [memory.md](./memory.md) - project notes and decisions
+- [`.env.example`](./.env.example) - environment template
 
-`DATABASE_URL` is the only variable it needs to serve real data; without it the catalog, registry and hire pages say on the page that they are serving fixtures.
+## Summary
 
-Set **`AGENTAUDITION_WORKER_HEALTH_URL`** to the worker's public URL so `/status` can report the queues. The worker runs on a different host, so its state is not in the database; without this the page says the worker is unconfigured rather than implying it is fine.
+AgentAudition is a marketplace where agents must audition before they can be trusted.
 
-Set **`AGENTAUDITION_COOKIE_SECRET`** in production. Hire ownership is a signed cookie, and without a configured secret the signing key is generated per process, so a redeploy stops recognising every cookie it previously issued and each visitor silently loses the hires they created. It is also required for wallet connection: without it the connect action throws.
+It gives judges three things that are easy to verify:
 
-## Status
-
-Every row below was checked against the deployment on 6 Sep 2026 rather than remembered. An earlier version of this section described adapters as stubs that had since been built, which is the same failure the rest of this project exists to remove: a claim nobody re-read.
-
-**Real, running, and covered by tests:** the ERC-8004 indexer and its re-sweep, the prober and its verified-live definition, the agent-card resolver and category classifier, the cross-reference against 8004scan, the shadow engine and interceptor, the behavioural envelope derived from recorded actions, the signed mandate, the ordered consent checklist, the hash-chained decision trace, the action gate, the hire pipeline, and the front end. **545 tests passing**, 90 skipped without a database.
-
-**Real and proven on chain**, with transactions anyone can check:
-
-| Piece | Evidence |
-| --- | --- |
-| Altana session keys | Grant with KeyStore registration, then revocation, [linked above](#altana-session-keys-granted-then-revoked) |
-| ERC-8183 escrow | Job `996` `FUNDED`, [linked above](#erc-8183-escrow-a-hire-settled-on-chain) |
-| GenLayer arbiter | Deployed at `0xB608B276…FDa0566` on Studio Next, [linked above](#the-arbiter-contract) |
-| Reference agent | Testnet token [#2187](https://testnet.bscscan.com/tx/0x03db85323cb9344d6a434a1715238160f059c10489732381943154accbd07d5a) and mainnet token [#346444](https://bscscan.com/tx/0x29f476460d878f54c5cdc6c02b0bf97c7da51fb76a225db114e5780f160e8080), scored on the same terms as everyone else |
-| `pcs-lp` and `venus-loan` positions | Minted against the real protocols on a forked mainnet |
-
-**Simulated, and labelled wherever it surfaces:**
-
-| Piece | State | What it would take |
-| --- | --- | --- |
-| Hire settlement | `SimulatedEscrow` unless `AGENTAUDITION_ESCROW_ENABLED=true` | The flag. `Erc8183EscrowClient` is built and has funded real jobs; it is off because the faucet pays 10 $U per 30 minutes and a judging window would drain it |
-| x402 payment | `SimulatedPayment` in the checkout | Nothing missing: `X402PaymentClient` is implemented for paid HTTP resources. It is not wired to hire settlement because x402 is merchant-driven and cannot pay a chosen party a chosen amount, which is what a hire is |
-| Probe digest anchoring | Off | A funded signer and a validation registry address |
-
-Nothing signs or broadcasts a hired agent's action on this deployment. The decision is what is real: both bounds are evaluated and the verdict is appended to a trace whose hash chain makes a later rewrite detectable.
-
-## What to evaluate in the demo
-
-These are product evaluation dimensions, not a claimed official rubric for the Kuala Lumpur event. Stated plainly, including where it falls short.
-
-**Functionality** - land, find by category, understand, activate. The catalog filters by four agent categories; each agent page carries its measured record; the hire checkout is five bounded confirmations (allowlist, spend cap, expiry, confirm together) that persist in Postgres and can be revoked from `/hires`. Settlement is the simulated step described above.
-
-**Data quality** - every ranking number is a measured counterfactual, not a rating. Each run records its fork block, window and seed so it can be re-run. A report shows the three-way split of how runs ended (completed, declined, unreachable) with each refusal in the agent's own words. Liveness is uptime, p95 latency and probe count, and "verified live" means the endpoint answered *and* spoke the protocol its card declares.
-
-**Agent diversity** - the four categories are surfaced with comparable depth, and the counts moved by two orders of magnitude when the catalog switched from the testnet registry to mainnet. The [catalog chips](https://agentaudition.vercel.app/agents) show live over registered per category and are always current, which is the number to trust over any figure written down here.
-
-The live subset is far smaller than the registered one and unevenly spread, and some categories will show **zero** verified-live agents against hundreds registered. That is a fact about the registry rather than a filter on this catalog (no marketplace can conjure a live agent that nobody has deployed), and the category page says exactly that instead of rendering an empty list. On a registry where roughly one registration in three hundred answers at all, it is the common case rather than the exception.
-
-**Chain** - the catalog indexes the ERC-8004 registry on **BSC mainnet** (`0x8004a169…a432`, about 345,000 registrations with roughly 2,000 arriving a day), cross-referenced against 8004scan. Auditions fork **BSC mainnet** state, so every performance number is measured against real liquidity, real prices and real gas.
-
-This used to read "BSC testnet", and the reason it does not any more is worth stating, because the obstacle was real and the fix is not a slogan. A full sweep of 345,000 registrations at the testnet settings takes about 57 hours, and the six-hour re-sweep timer rearms the moment it finishes, so the indexer would spend its life rewriting every row in the registry, which is what exhausted a hosted-Postgres transfer allowance and took the site down. Worse, probing all ~36,000 endpoint-bearing registrations on an hourly cadence is 864,000 probes a day that cannot finish inside the freshness window, so agents drop out of "verified live" because *AgentAudition* failed to reach them in time. That publishes this deployment's throughput as a finding about someone else's agent, which is exactly the kind of confident wrong number this project exists to remove.
-
-Both are fixed by sizing the work to the registry rather than to habit. The indexer walks 2,000 tokens a tick and finishes a first pass in about 14 hours, then leaves the set alone for a month. The prober keeps the hourly cadence for endpoints that answer and demotes the rest to every two days, promoting one back the instant it responds. Measured against a uniform random sample of 2,000 token ids, that is the difference between 864,000 probes a day and about 46,000.
-
-**What the sample found**, ahead of the catalog's own count, is the table at the top of this document: 92.8% of mainnet registrations resolve a card, **10.55%** declare a callable endpoint at all, and **0.35%** answer and speak the protocol their own card declares, roughly 1,200 live agents inside a registry of 345,000. The live chips on [/registry](https://agentaudition.vercel.app/registry) are the catalog's own census and are the number to trust once the first pass completes.
-
-## See also
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - the problem, the mechanism, the system design.
-- [plan.md](./plan.md) - the phase state and cut lines.
-- [memory.md](./memory.md) - what is currently blocking.
-- [`.env.example`](./.env.example) - every variable, grouped, with local defaults matching `docker-compose.yml`.
+- a clear product thesis
+- a working demo flow
+- real technical evidence behind the core claim
