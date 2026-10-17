@@ -34,10 +34,10 @@ export default async function AdvantagePage() {
           <span className="eyebrow">Agent Advantage Report</span>
           <h1 className="h2">Measured, not asserted.</h1>
           <p className="lead">
-            Each task below ran twice on identical state: once with the agent driving, once with the
-            position left alone. Same fork block, same seed, same window. Nothing here was typed by
-            hand - every figure comes from a recorded audition, and the replay hash on each row is
-            what lets you re-run it and get the same starting state.
+            Every task below ran twice on identical state: once with the agent driving, once with the
+            position left alone. Same fork block, same seed, same window. Nothing was typed by hand.
+            Each figure comes from a recorded audition, and the replay hash on each row lets you
+            re-run it.
           </p>
           {isLiveData ? null : (
             <p className="notice notice-warn" role="status">
@@ -67,8 +67,8 @@ export default async function AdvantagePage() {
             </div>
           </div>
           <p className="small">
-            &ldquo;Won&rdquo; means the agent beat the baseline by more than it cost to run -
-            gaining three dollars while spending five is not a win.
+            &ldquo;Won&rdquo; means the agent beat the baseline by more than it cost to run. Gaining
+            three dollars while spending five is not a win.
           </p>
         </div>
 
@@ -109,12 +109,12 @@ export default async function AdvantagePage() {
               this whole report exists to avoid, so it says what it is and
               lets the reader judge whether it counts. */}
           <p className="small">
-            One honest caveat about what these runs are. Each task is an <em>audition</em>: the
-            agent was driven at its own endpoint, against a mirror of a real position, under the
-            same allowlist, spend cap and expiry a hire would set - but before any payment. AgentAudition
-            measures agents this way on purpose, because asking someone to pay first and find out
-            afterwards is the problem it was built to remove. If a task only counts when money has
-            changed hands, these are not that, and the report says so rather than relabelling them.
+            One honest caveat about what these runs are. Each task is an <em>audition</em>: the agent
+            was driven at its own endpoint against a mirror of a real position, under the same
+            allowlist, spend cap and expiry a hire would set, but before any payment. That is
+            deliberate. Asking someone to pay first and find out afterwards is the problem this was
+            built to remove. If a task only counts once money has changed hands, these are not that,
+            and this says so rather than relabelling them.
           </p>
         </div>
 

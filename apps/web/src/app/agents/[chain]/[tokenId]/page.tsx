@@ -91,7 +91,7 @@ export default async function AgentPage({
           the fork rather than being broadcast.
         </p>
         <div className="grid grid-2">
-          <div className="slab on-dark stack stack-12">
+          <div className="slab stack stack-12">
             <div className="row-between">
               <span className="eyebrow">From auditions</span>
               {agent.score ? <BasisBadge score={agent.score} /> : null}
@@ -243,7 +243,7 @@ export default async function AgentPage({
         </div>
 
         {/* hire */}
-        <div className="slab on-dark stack stack-16">
+        <div className="slab stack stack-16">
           <span className="eyebrow">Hiring</span>
           <h2 className="h3">Bounded by what it just did.</h2>
           <p className="body" style={{ maxWidth: '44rem' }}>
@@ -263,7 +263,7 @@ export default async function AgentPage({
             <Link href={`/agents/${chain}/${tokenId}/hire`} className="btn btn-primary">
               Hire this agent →
             </Link>
-            <Link href="/report" className="btn btn-ghost on-dark">
+            <Link href="/report" className="btn btn-ghost">
               See it against your own position →
             </Link>
           </div>

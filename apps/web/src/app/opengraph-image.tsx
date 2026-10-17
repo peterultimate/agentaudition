@@ -18,7 +18,7 @@ export default function OgImage() {
         style={{
           width: '100%',
           height: '100%',
-          background: '#f4f4f4',
+          background: '#0a0a0b',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -27,16 +27,31 @@ export default function OgImage() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <svg width="48" height="48" viewBox="0 0 32 32">
-            <g fill="#0b0b0b">
-              <rect x="2" y="12" width="5" height="12" rx="1.5" />
-              <rect x="9.5" y="6" width="5" height="18" rx="1.5" />
-              <rect x="17" y="15" width="5" height="9" rx="1.5" />
-              <rect x="24.5" y="2" width="5" height="22" rx="1.5" />
-              <rect x="2" y="26.5" width="27.5" height="3.5" rx="1.75" />
-            </g>
+          <svg width="60" height="48" viewBox="0 0 84 67">
+            {/*
+              Object-bounding-box units, not `userSpaceOnUse`.
+
+              The brand gradient is vertical, so it can be written as 0->1 down
+              the box, which is what the renderer here understands without being
+              told about the coordinate system. The product's own copy of this
+              gradient is in user space because there it sits inside a viewBox
+              it shares with the mark; the two produce the same ramp, and these
+              stops run top-down, so they are the reverse of the SVG's.
+            */}
+            <defs>
+              <linearGradient id="aa-og" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#F9C359" />
+                <stop offset="0.32" stopColor="#F49E84" />
+                <stop offset="0.64" stopColor="#D05CC8" />
+                <stop offset="1" stopColor="#5E2FF7" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M42.0002 11.7246C44.4377 11.7246 46.4105 13.6997 46.4105 16.1367C46.4105 17.7493 45.5469 19.1603 44.2546 19.93V25.4941H57.8906C62.8454 25.4941 66.8881 29.5352 66.8881 34.4899V46.4194C66.8881 51.3742 62.8454 55.4147 57.8906 55.4147H26.108C21.1533 55.4147 17.1122 51.3747 17.1122 46.4194V34.4899C17.1122 29.5346 21.1533 25.4941 26.108 25.4941H39.7441V19.9294C38.4518 19.1596 37.5882 17.7486 37.5882 16.1367C37.5882 13.6997 39.5626 11.7245 42.0001 11.7245L42.0002 11.7246ZM46.8125 35.7888V45.0604C46.8125 45.8754 47.4774 46.5405 48.2925 46.5405H54.6523C55.4689 46.5405 56.1338 45.8755 56.1338 45.0604V35.7888C56.1338 34.9734 55.4689 34.3078 54.6523 34.3078H48.2925C47.4775 34.3078 46.8125 34.9734 46.8125 35.7888ZM37.1878 35.7888C37.1878 34.9734 36.5213 34.3078 35.7063 34.3078H29.3466C28.5315 34.3078 27.865 34.9734 27.865 35.7888V45.0604C27.865 45.8754 28.5315 46.5405 29.3466 46.5405H35.7063C36.5213 46.5405 37.1878 45.8755 37.1878 45.0604V35.7888ZM51.8049 0H32.1939C27.5036 0 23.4844 2.4753 21.374 6.66301L1.53615 46.0292C-0.696366 50.4597 -0.488276 55.3381 2.11345 59.5606C4.71525 63.7863 8.97692 66.1659 13.9379 66.1659H70.0609C75.0219 66.1659 79.2836 63.7863 81.8853 59.5606C84.4887 55.3381 84.6968 50.4597 82.4626 46.0292L62.6249 6.66301C60.5143 2.4753 56.4952 0 51.8049 0Z"
+              fill="url(#aa-og)"
+            />
           </svg>
-          <div style={{ fontSize: 40, fontWeight: 700, color: '#0b0b0b', letterSpacing: -1.5 }}>
+          <div style={{ fontSize: 40, fontWeight: 700, color: '#f2f2f3', letterSpacing: -1.5 }}>
             AgentAudition
           </div>
         </div>
@@ -46,7 +61,7 @@ export default function OgImage() {
             style={{
               fontSize: 76,
               fontWeight: 700,
-              color: '#0b0b0b',
+              color: '#f2f2f3',
               letterSpacing: -3,
               lineHeight: 1.05,
             }}
@@ -58,8 +73,8 @@ export default function OgImage() {
               style={{
                 fontSize: 76,
                 fontWeight: 700,
-                color: '#ffffff',
-                background: '#0b0b0b',
+                color: '#0b0b0b',
+                background: '#f2f2f3',
                 letterSpacing: -3,
                 lineHeight: 1.05,
                 padding: '6px 26px 16px',
@@ -73,7 +88,7 @@ export default function OgImage() {
             style={{
               fontSize: 76,
               fontWeight: 700,
-              color: '#0b0b0b',
+              color: '#f2f2f3',
               letterSpacing: -3,
               lineHeight: 1.05,
             }}
@@ -82,7 +97,7 @@ export default function OgImage() {
           </div>
         </div>
 
-        <div style={{ fontSize: 26, color: '#6b6b6b' }}>
+        <div style={{ fontSize: 26, color: '#98989d' }}>
           An agent marketplace on BNB Smart Chain that ranks on measured behaviour, not stars.
         </div>
       </div>

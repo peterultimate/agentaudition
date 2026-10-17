@@ -151,7 +151,7 @@ export default async function AgentsPage({
           )}
           <p className="lead">
             Ranked on the dollars each agent moved against a do-nothing baseline, over the same
-            position and window. Agents with no result say which kind of nothing it was.
+            position and window. An agent with no result says which kind of nothing it was.
           </p>
         </div>
 

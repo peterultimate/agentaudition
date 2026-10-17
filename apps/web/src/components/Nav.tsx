@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Wordmark } from '@/components/Logo';
@@ -17,11 +17,16 @@ const LINKS = [
 
 export function Nav() {
   const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const path = usePathname();
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Close on route change, so tapping a link in the drawer does not leave it
   // open over the page it just navigated to.
-  useEffect(() => setOpen(false), [path]);
+  useEffect(() => {
+    setOpen(false);
+    setMenuOpen(false);
+  }, [path]);
 
   useEffect(() => {
     if (!open) return;
@@ -39,6 +44,24 @@ export function Nav() {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node) !== true) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
   return (
     <>
       <header className="nav">
@@ -47,13 +70,50 @@ export function Nav() {
             <Wordmark />
           </Link>
 
-          <nav className="nav-links">
-            {LINKS.map(([label, href]) => (
-              <Link key={href} href={href} data-active={path === href}>
-                {label}
-              </Link>
-            ))}
-          </nav>
+          <div className="nav-links" ref={menuRef}>
+            <button
+              type="button"
+              className="nav-menu-btn"
+              onClick={() => setMenuOpen((value) => !value)}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              aria-controls="desktop-nav-menu"
+            >
+              Explore
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                aria-hidden="true"
+                className="nav-menu-caret"
+              >
+                <path
+                  d="M3 5.25 7 9l4-3.75"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+
+            {menuOpen ? (
+              <div className="nav-menu" id="desktop-nav-menu" role="menu" aria-label="Primary links">
+                {LINKS.map(([label, href]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    role="menuitem"
+                    data-active={path === href}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           <div className="spacer" />
 

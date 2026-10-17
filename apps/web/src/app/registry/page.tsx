@@ -78,7 +78,7 @@ export default async function RegistryPage() {
             2026.{' '}
             {indexed
               ? 'Below is the same measurement, recomputed from AgentAudition’s own indexer and prober against what is registered right now.'
-              : 'The same measurement runs below, from AgentAudition’s own prober - but against a demo catalog rather than the live registry, so the figures describe this deployment and not the state of BSC.'}
+              : 'The same measurement runs below, but against a demo catalog rather than the live registry, so these figures describe this deployment and not the state of BSC.'}
           </p>
         </div>
 
@@ -99,16 +99,15 @@ export default async function RegistryPage() {
             </p>
             <p className="body">
               The indexer has not run against a registry on this deployment, so the live share below
-              is a property of the demo catalog and is not comparable to the paper&rsquo;s 4%. It
-              starts measuring the real registry the moment the indexer is pointed at one.
+              describes the demo catalog and is not comparable to the paper&rsquo;s 4%.
             </p>
           </div>
         )}
 
         <p className="small">
-          The measurement below is only as current as the machinery producing it -{' '}
-          <Link href="/status">what the indexer, prober and audition queues are doing</Link> is on
-          its own page, including any queue that is completing without doing work.
+          This measurement is only as current as the machinery behind it.{' '}
+          <Link href="/status">What the indexer, prober and audition queues are doing</Link> is on its
+          own page, including any queue that is completing without doing work.
         </p>
 
         <div className="statgrid">
@@ -244,9 +243,8 @@ export default async function RegistryPage() {
             </p>
           ) : (
             <p className="body">
-              AgentAudition reads the registry from chain directly, and cross-checks that against{' '}
-              <a href="https://8004scan.io">AltLayer&rsquo;s 8004scan</a> - an independent explorer
-              - so the figures above are corroborated rather than merely asserted.{' '}
+              AgentAudition reads the registry from chain directly, and cross-checks it against{' '}
+              <a href="https://8004scan.io">AltLayer&rsquo;s 8004scan</a>, an independent explorer.{' '}
               {agreement.status === 'unconfigured'
                 ? 'An API key has been requested and is not yet in place, so nothing has been cross-checked yet.'
                 : 'The source did not answer usably on the last run.'}
@@ -254,9 +252,8 @@ export default async function RegistryPage() {
           )}
 
           <p className="tiny">
-            One-directional by construction: looking up ids AgentAudition already holds measures
-            corroboration, not coverage. The chain remains the source of truth; this never gates the
-            catalog.
+            One-directional by construction: it looks up ids AgentAudition already holds, so it
+            measures corroboration and not coverage. The chain stays the source of truth.
           </p>
         </div>
 
@@ -266,8 +263,8 @@ export default async function RegistryPage() {
             <h2 className="h3">What “verified live” means here</h2>
             <p className="body">
               The endpoint responded <em>and</em> spoke the protocol its agent card declares. An
-              endpoint that returns 200 to everything is not a live agent, it is a live web server -
-              and that distinction is the whole difference between this number and a registry read.
+              endpoint that returns 200 to everything is not a live agent, it is a live web server.
+              That distinction is the whole difference between this number and a registry read.
             </p>
             <ul className="body" style={{ margin: 0, paddingLeft: '1.1rem' }}>
               <li>at least 3 probes behind the verdict</li>
@@ -276,7 +273,7 @@ export default async function RegistryPage() {
             </ul>
           </div>
 
-          <div className="slab on-dark stack stack-12">
+          <div className="slab stack stack-12">
             <h2 className="h3">Why publish it at all</h2>
             <p className="body">
               This measurement is the input to AgentAudition’s ranking, published so the input is auditable

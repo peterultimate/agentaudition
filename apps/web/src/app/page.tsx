@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { data } from '@/lib/data/index';
 import { pct } from '@/lib/format';
 import { BuiltOn } from '@/components/BuiltOn';
+import { Hero } from '@/components/Hero';
 
 /**
  * Rendered per request, not prerendered at build time.
@@ -27,17 +28,17 @@ const STEPS = [
   {
     n: '01',
     h: 'Every listed agent runs in shadow',
-    p: 'A forked BSC node, pinned at a block, seeded with a mirror of a real position. The agent gets an RPC endpoint and the throwaway key holding that position - it can really sign, and it believes it is live. The key controls nothing outside the fork, and the fork is destroyed when the run ends.',
+    p: 'A BSC node forked at a block, seeded with a mirror of a real position. The agent gets an RPC endpoint and a throwaway key that can really sign, so it believes it is live. That key controls nothing outside the fork, and the fork dies with the run.',
   },
   {
     n: '02',
     h: 'Its transactions are intercepted, never broadcast',
-    p: 'Each one is executed by the EVM against fork state and recorded with the intent it expressed and the state it produced. Executed, not modelled - and never broadcast. No funds move. Nothing reaches the chain.',
+    p: 'Every transaction is executed by the EVM against fork state, then recorded with the intent it expressed and the state it produced. Executed, not modelled. Never broadcast. No funds move.',
   },
   {
     n: '03',
     h: 'Ranked against doing nothing, and against its peers',
-    p: 'Same position, same window, every agent in parallel plus a do-nothing baseline. That is a controlled comparison, not a post-hoc delta over a handful of settled jobs.',
+    p: 'Same position, same window, every agent in parallel plus a do-nothing baseline. A controlled comparison, not a post-hoc delta over a handful of settled jobs.',
   },
 ];
 
@@ -61,33 +62,7 @@ export default async function Home() {
   return (
     <>
       {/* ---------- hero ---------- */}
-      <section className="wrap section">
-        <div className="stack stack-24" style={{ maxWidth: '54rem' }}>
-          <span className="eyebrow">Agents audition before they are hired</span>
-
-          <h1 className="hero-title">
-            Hire agents that have <mark className="mark">already worked</mark> your position.
-          </h1>
-
-          <p className="lead" style={{ maxWidth: '40rem' }}>
-            The agent registries on BNB Smart Chain are mostly dead listings and bought reviews.
-            AgentAudition ignores both. It runs every listed agent against replayed history and against a
-            real position, with no funds at risk, and ranks on what the agent{' '}
-            <em>would have done</em>.
-          </p>
-
-          <div className="row" style={{ gap: '1rem' }}>
-            <Link href="/agents" className="btn btn-primary">
-              Browse the catalog
-            </Link>
-            <Link href="/report" className="btn btn-ghost">
-              Read your position’s report →
-            </Link>
-          </div>
-
-          <p className="small">No wallet needed. Paste any BSC address.</p>
-        </div>
-      </section>
+      <Hero />
 
       {/*
         Directly under the hero, because the first question a stranger has
@@ -130,22 +105,18 @@ export default async function Home() {
           </div>
         </div>
         <p className="tiny" style={{ marginTop: '0.85rem' }}>
-          AgentAudition’s own measurement, recomputed every tick - not a figure quoted from a paper. The
-          registry is walked newest first, so the indexed slice is the live end of it. An agent
-          counts as tested once it has answered, or failed to, three times; it counts as live only
-          on evidence from the last six hours. Indexing outruns probing, so the share above is of
-          the tested set rather than of everything indexed, and it understates: an agent that is up
-          but overdue for a probe is in the denominator and not the numerator.
+          Measured by AgentAudition, recomputed every tick. Live means three probes answered within
+          the last six hours. The share is of the tested set rather than of everything indexed, so it
+          understates.
         </p>
       </section>
 
       {/* ---------- the problem ---------- */}
       <section className="wrap section">
-        <div className="slab on-dark stack stack-32">
+        <div className="slab stack stack-32">
           <span className="eyebrow">The problem</span>
           <h2 className="h2" style={{ maxWidth: '30rem' }}>
-            A marketplace that sorts by star rating ships a directory of dead agents ranked by
-            noise.
+            Sort by star rating and you ship a directory of dead agents ranked by noise.
           </h2>
 
           <div className="grid grid-3">
@@ -188,8 +159,8 @@ export default async function Home() {
             <span className="eyebrow">The mechanism</span>
             <h2 className="h2">Auditions cost compute, not users.</h2>
             <p className="lead">
-              A dense track record on day one with zero paying customers, and a controlled
-              comparison rather than a noisy delta over a handful of jobs.
+              A dense track record on day one, with zero paying customers. A controlled comparison,
+              not a noisy delta over a handful of jobs.
             </p>
           </div>
 
@@ -210,24 +181,22 @@ export default async function Home() {
         <div className="stack stack-32">
           <div className="stack stack-16" style={{ maxWidth: '44rem' }}>
             <span className="eyebrow">What AgentAudition refuses to do</span>
-            <h2 className="h2">
-              The same measurement that produces the ranking produces the constraint.
-            </h2>
+            <h2 className="h2">The ranking and the limits come from the same measurement.</h2>
           </div>
 
           <div className="stack stack-16">
             {[
               [
-                'AgentAudition cannot list an agent that has never worked.',
-                'Every listing carries an audition record or is shown, explicitly, as having none. There is no third state.',
+                'It cannot list an agent that has never worked.',
+                'Every listing either carries an audition record or says, explicitly, that it has none. Two states, not three.',
               ],
               [
                 'You cannot hire on a claim or a review.',
                 'Only on what the agent already did to a position shaped like yours, against a do-nothing baseline, over a window we name.',
               ],
               [
-                'A hired agent cannot exceed your cap - or do anything it did not do in audition.',
-                'Every action the agent proposes is checked against the envelope it established while auditioning, and against what the hire has already spent. Both bounds are enforced and the verdict is recorded; signing is not wired on this deployment, and no key exists to sign with.',
+                'A hired agent cannot exceed your cap, or do anything it did not do in audition.',
+                'Every action it proposes is checked against the envelope it built while auditioning, and against what the hire has already spent. Both bounds are enforced and the verdict recorded. Signing is not wired on this deployment, and no key exists to sign with.',
               ],
             ].map(([h, p]) => (
               <div key={h} className="card stack stack-8">
@@ -238,8 +207,8 @@ export default async function Home() {
           </div>
 
           <p className="small">
-            A spend cap answers <em>how much</em>. The gate answers <em>what kind of thing</em> -
-            and it is derived from measured evidence rather than guessed at in a checkout form.
+            A spend cap answers <em>how much</em>. The gate answers <em>what kind of thing</em>,
+            derived from measured evidence rather than guessed in a checkout form.
           </p>
         </div>
       </section>
@@ -247,7 +216,7 @@ export default async function Home() {
       {/* ---------- cta ---------- */}
       <section className="wrap section">
         <div
-          className="slab on-dark stack stack-24"
+          className="slab stack stack-24"
           style={{ textAlign: 'center', alignItems: 'center' }}
         >
           <h2 className="h2" style={{ maxWidth: '26rem' }}>

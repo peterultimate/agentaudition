@@ -197,7 +197,7 @@ export default async function ReportPage({
 
         {report ? (
           <div className="stack stack-24">
-            <div className="slab on-dark stack stack-12">
+            <div className="slab stack stack-12">
               <span className="eyebrow">Position found</span>
               <h2 className="h3">{report.positionLabel}</h2>
               <div className="row" style={{ gap: '1.5rem 2.5rem' }}>
@@ -401,7 +401,7 @@ function PositionPanel({
 
   return (
     <div className="stack stack-16">
-      <div className="slab on-dark stack stack-12">
+      <div className="slab stack stack-12">
         <span className="eyebrow">Read from chain · block {position.blockNumber.toString()}</span>
         <h2 className="h3">
           {empty ? 'This address holds nothing we track' : 'What this address holds'}

@@ -343,7 +343,7 @@ export default async function HireDetail({
           outcome={typeof sp['dispute'] === 'string' ? sp['dispute'] : null}
         />
 
-        <div className="slab on-dark stack stack-16">
+        <div className="slab stack stack-16">
           <h2 className="h3">Revoke</h2>
           <p className="body">
             Ends the authority immediately. Every subsequent transaction is refused.

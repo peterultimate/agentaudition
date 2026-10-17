@@ -1,11 +1,19 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { Poppins } from 'next/font/google';
+import { Space_Grotesk } from 'next/font/google';
 import { Nav } from '@/components/Nav';
 import { Footer } from '@/components/Footer';
 import './globals.css';
 
-const sans = Poppins({
+/**
+ * One face, used at every size.
+ *
+ * Space Grotesk carries both the display headings and the body copy. It is a
+ * grotesque with a tall x-height and slightly narrow letterforms, which is what
+ * lets a single family work in both roles - the tight tracking on the headings
+ * reads as intentional rather than as a stretched text face.
+ */
+const sans = Space_Grotesk({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-sans',
