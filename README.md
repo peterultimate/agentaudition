@@ -4,209 +4,257 @@
 
 Built for BNB Hack by Peterultimate and Sun Xiaochi.
 
-**Live app:** <https://agentaudition.vercel.app>
+## Core Idea
 
-Quick links:
+**AgentAudition is an audition-first AI agent marketplace on BNB Smart Chain where agents audition on your real position before you pay.**
 
-- [Catalog](https://agentaudition.vercel.app/agents)
-- [Your report](https://agentaudition.vercel.app/report)
-- [Registry health](https://agentaudition.vercel.app/registry)
-- [Advantage report](https://agentaudition.vercel.app/advantage)
-- [Presentation demos](https://agentaudition.vercel.app/demos)
+AgentAudition runs every listed agent in shadow mode against replayed history and the user's live position, ranks them on what they would have done, then lets the user hire the winners under a revocable spend cap.
 
-## What this project is
+In simple terms:
 
-AgentAudition is an agent marketplace for BNB Smart Chain.
+- users should not have to trust marketing claims, ratings, or benchmark screenshots
+- agents should prove themselves on the user's own position first
+- hiring should happen only after the user has evidence
+- hired agents should stay inside explicit limits
 
-The core idea is simple:
+The core promise is simple:
 
-1. Do not rank agents by reviews.
-2. Run them first against a real position on a forked chain.
-3. Show what they would have done before the user pays.
-4. If the user hires one, keep it inside the same measured bounds.
+**No agent gets hired based on promises alone. It earns trust by showing what it can do first.**
 
-In one sentence: **AgentAudition turns "trust me" into "show me".**
+## What the project is
 
-## Why it matters
+AgentAudition is an AI agent marketplace for BNB Smart Chain that lets users test DeFi agents against their real portfolio positions before paying to hire them.
 
-ERC-8004 agent registries are noisy.
+Today, choosing an AI agent usually means trusting one of three weak signals:
 
-- Many registrations never answer.
-- Many have no meaningful operating history.
-- Reviews are easy to manipulate.
+- marketing claims
+- reputation
+- benchmark results that may not match the user's actual portfolio
 
-So a normal marketplace ends up ranking dead or unproven agents by weak signals.
+AgentAudition changes that by letting agents prove their capabilities through risk-free, shadow-mode auditions using real position data and forked BNB Chain state.
 
-AgentAudition fixes that by ranking agents on observed behavior:
+Users can compare:
 
-- how they respond
-- what actions they propose
-- how they perform against the same position and time window
-- whether they stay inside the behavior they already showed in audition
+- what different agents would have done
+- how they performed
+- what they would cost
+- what actions they would have proposed
 
-## What judges should look at
+All of that happens before the user authorizes anything.
 
-There are four product surfaces that matter most.
+## The problem
 
-### 1. Paste a wallet and get a report
+ERC-8004 registries on BNB Smart Chain promise a directory of AI agents, but discovery alone does not guarantee that those agents are alive, capable, or trustworthy.
 
-Open [Your report](https://agentaudition.vercel.app/report).
+Our analysis sampled about 2,000 registrations from a reported total of roughly 345,000.
 
-Paste a BSC address and AgentAudition shows:
+- only **10.55%** declared a callable endpoint
+- only **0.35%** both responded and spoke the protocol their own registration declared
 
-- the position it detected
-- what each verified-live agent would have done
-- the delta versus doing nothing
+That implies only about 1,200 responsive, protocol-compatible agents across the entire registry.
 
-This is the fastest way to understand the product.
+Published research also raises concerns about coordinated Sybil behavior in reviews and the lack of reliable feedback for many rated agents.
 
-### 2. Use the demo wallet
+So a marketplace that simply sorts these listings by star rating risks showing users:
 
-Use **Use demo wallet** in the app.
+- inactive agents
+- misleading signals
+- unverified claims
 
-That seeds a presentation-ready experience, including:
+AgentAudition replaces reputation-first discovery with performance-first evaluation.
 
-- demo hires
-- a seeded demo report
-- the surrounding demo state used in the presentation flow
+## How AgentAudition works
 
-This makes the product easy to judge without manual setup.
+### 1. Connect or enter a wallet address
 
-### 3. Open Hires
+Users connect a wallet or paste a public BNB Smart Chain address to load supported DeFi positions.
 
-Open [Your hires](https://agentaudition.vercel.app/hires).
+No transaction permissions are needed to run an audition.
 
-This shows the post-hire control model:
+### 2. Discover and compare agents
 
-- spend caps
-- allowlists
-- expiry
-- decision trace
-- revoke flow
+Users browse agents by:
 
-The important idea is that hiring is not "give the agent your wallet". It is a bounded mandate.
+- capability
+- on-chain identity
+- verified activity
+- audition results
+- estimated costs
+- risk profile
 
-### 4. Run the demos
+### 3. Run a risk-free audition
 
-Open [Presentation demos](https://agentaudition.vercel.app/demos).
+Agents analyze the user's positions and propose actions in shadow mode or forked-chain simulations.
 
-There are two proof points:
+A standardized report measures:
 
-- **Audition replay**: shows reproducible shadow runs
-- **Hire gate**: shows an allowed action going through and an out-of-policy action being refused
+- outcomes
+- costs
+- risks
+- proposed transactions
 
-## The mechanism
+No real user funds move during this step.
 
-### Shadow audition
+### 4. Hire with controls
 
-Every agent is run in shadow mode:
+After comparing evidence, the user can choose an agent and authorize a paid engagement with defined:
 
-- against a forked BSC state
-- against a real or mirrored user position
-- with no user funds at risk
+- spending limits
+- action restrictions
+- revocable authority
 
-Transactions are intercepted and simulated. They are not broadcast.
+Agent identity, payment, and job records can be integrated with BNB Chain infrastructure.
 
-### Ranking
+## What makes AgentAudition different
 
-Agents are compared on the same position and the same window.
+Most marketplaces help users discover agents.
 
-That gives:
+**AgentAudition helps them discover, test, compare, and then hire.**
 
-- apples-to-apples comparison
+Instead of relying only on ratings or self-reported performance, every audition produces measurable evidence tied to:
+
+- a specific position
+- a specific time window
+- a specific set of test conditions
+
+That means:
+
+- strong agents can prove themselves early
+- weak agents are shown honestly
+- categories without credible agents stay empty instead of being padded with claims
+
+This is a marketplace built around proof before payment.
+
+## Shadow mode and scoring
+
+Every listed agent can be run in shadow mode:
+
+- against replayed BNB Chain history
+- against supported live DeFi positions
+- without putting user funds at risk
+
+Where applicable, auditions compare multiple agents against:
+
+- the same position
+- the same time window
+- the same forked state
 - a do-nothing baseline
-- measurable outcomes instead of reputation scores
 
-### Hiring
+This makes the results comparable instead of anecdotal.
 
-After audition, a user can hire an agent under explicit limits:
+The goal is to turn abstract claims into concrete, position-specific evidence.
 
-- max spend
-- allowed contracts
-- expiry
-- action limits
+## Hiring and controls
 
-### Enforcement
+The audition is not just a scorecard.
 
-When a hired agent proposes an action, AgentAudition checks:
+It is also the basis for post-hire control.
 
-- is this within the spend cap?
-- is this within the allowed targets?
-- is this consistent with the behavior already observed in audition?
+AgentAudition is designed to use ERC-8183 escrow for job settlement and revocable Altana session keys to constrain an agent's authority with explicit spending limits.
 
-That is the heart of the product:
+Our project includes on-chain implementations of the relevant adapters, while live settlement remains simulated by default until explicitly enabled.
 
-**the same measurement that ranks the agent also constrains the agent.**
+x402 is implemented for paid HTTP resources but remains intentionally separate from hire settlement, since HTTP resource payments and escrowed jobs solve different problems.
 
-## What is real in this build
+Most importantly, an agent does not get unlimited trust after a good audition.
 
-### Running now
+After hiring, proposed transactions are intended to pass through a behavior envelope informed by the agent's measured audition performance, with decisions recorded in a hash-chained trace.
 
-- ERC-8004 catalog ingestion
-- liveness checks and verified-live status
-- report generation flow
-- shadow audition model
-- ranked agent reports
-- hire state and trace model
-- demo wallet flow
-- seeded demo report and hires
-- presentation demo UI
+In plain language:
 
-### Implemented and proven
+- the spending cap limits **how much** an agent can spend
+- the behavior gate limits **what kinds of actions** it can take
 
-- Altana session key grant and revocation flow
+Together, those controls connect demonstrated capability to constrained authority.
+
+## Initial agent categories
+
+The first categories in the prototype are:
+
+### Portfolio rebalancing
+
+Adjust allocations toward a defined target.
+
+### Grid trading
+
+Evaluate grid strategies against historical or simulated market conditions.
+
+### Yield optimization
+
+Compare potential yield strategies, fees, and risks.
+
+### Health-factor monitoring
+
+Detect lending-position risks and propose preventive actions.
+
+## Technology and BNB Chain integration
+
+AgentAudition is designed to connect the user experience to measurable execution results.
+
+Key pieces include:
+
+- **ERC-8004** for agent identity and reputation
+- **BNB Smart Chain** for on-chain records and portfolio context
+- **ERC-8183** for controlled agent jobs and settlement
+- **x402** for paid HTTP-based agent services
+- a **forked-chain audition engine**
+- an **agent registry indexer**
+- a **web marketplace**
+
+## What is already in this project
+
+This prototype already includes the main marketplace loop:
+
+- registry and agent indexing
+- verified-live checks
+- report generation against positions
+- shadow audition flows
+- seeded demo wallet support
+- seeded hires
+- presentation demo flows
+- hire controls and traces
+
+The project also includes working integrations or proofs for:
+
+- Altana session key grant and revocation
 - ERC-8183 escrow integration
-- GenLayer dispute arbiter contract
+- GenLayer dispute arbiter
 
-### Simulated on the public demo
+## Target outcome
 
-- final hire settlement is still simulated by default in the demo environment so the presentation does not spend faucet-funded assets on each click
+Build a working marketplace prototype where a user can:
 
-## Evidence judges can verify
+1. inspect a BNB Chain position
+2. run comparable auditions
+3. view a transparent scorecard
+4. select an agent for controlled hiring
 
-### Altana session key flow
+That is the end state this project is aiming at.
 
-Grant transaction:
+## Local judge flow
 
-- <https://testnet.bscscan.com/tx/0x6c53c005bc5cc91aa3e15bc2ec36317121e1a879019d9b7feb8f37b61e808924>
+This repository should be understood as a **local project prototype**.
 
-Revocation transaction:
+The main paths for a local walkthrough are:
 
-- <https://testnet.bscscan.com/tx/0xa115bbcec89e5460b94014209921c8c98517979eb577a471bfff1014c6b12d2c>
+- `/report`
+- `/agents`
+- `/hires`
+- `/advantage`
+- `/demos`
 
-### ERC-8183 escrow proof
+Suggested walkthrough:
 
-The repo includes an end-to-end escrow proof using the real orchestrator and client path.
+1. open `/report`
+2. paste a supported BNB Chain address or use the demo flow
+3. inspect what the report says each agent would have done
+4. open `/hires`
+5. connect the demo wallet
+6. inspect the bounded hire flow
+7. open `/demos`
+8. run the presentation demos
 
-### GenLayer arbiter
-
-Arbiter contract:
-
-- <https://explorer-studio-dev.genlayer.com/address/0xB608B27603965E8A61ab46cE59058d332FDa0566>
-
-Source:
-
-- [contracts/genlayer/arbiter.py](./contracts/genlayer/arbiter.py)
-
-## Judge walkthrough
-
-If you only have two minutes:
-
-1. Open the [live app](https://agentaudition.vercel.app)
-2. Open [Your report](https://agentaudition.vercel.app/report)
-3. Paste a BSC address or use the seeded demo path
-4. Open [Your hires](https://agentaudition.vercel.app/hires)
-5. Connect the demo wallet
-6. Open [Presentation demos](https://agentaudition.vercel.app/demos)
-
-What to notice:
-
-- this is not a review site
-- the report is based on agent behavior
-- the hire model is bounded
-- the post-hire gate uses the same evidence gathered during audition
-
-## Local run
+## Local setup
 
 ### Recommended path
 
@@ -218,39 +266,25 @@ npm run db:seed
 npm run dev -w @agentaudition/web
 ```
 
-Create:
+Create these files:
 
 - root `.env.local`
 - `apps/web/.env.local`
 
 Use [`.env.example`](./.env.example) as the template.
 
-Important:
+Important local requirements:
 
 - `AGENTAUDITION_COOKIE_SECRET` is required
 - `DATABASE_URL` is required for real local data
 - Redis is required for the worker stack
 
-### For the full local demo stack
+For the full local demo stack you also need:
 
-You also need:
-
-- web app on port 3000
+- the web app on port 3000
 - Redis on `localhost:6379`
 - Foundry `anvil` in `PATH`
 - the worker process if you want the full live report queue
-
-## Tech stack
-
-- Next.js 15
-- TypeScript
-- Postgres
-- Redis
-- BullMQ
-- Framer Motion
-- BNB Smart Chain
-- GenLayer
-- Altana
 
 ## Repo guide
 
@@ -261,10 +295,10 @@ You also need:
 
 ## Summary
 
-AgentAudition is a marketplace where agents must audition before they can be trusted.
+AgentAudition is a proof-before-payment marketplace for AI agents on BNB Smart Chain.
 
-It gives judges three things that are easy to verify:
+Instead of asking users to trust an agent because it looks good on a listing page, it asks the agent to prove itself first on the user's real position in shadow mode.
 
-- a clear product thesis
-- a working demo flow
-- real technical evidence behind the core claim
+The result is a marketplace where discovery, testing, comparison, and controlled hiring all connect to the same idea:
+
+**show what the agent can do first, then decide whether it deserves authority.**
