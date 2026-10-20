@@ -2,7 +2,9 @@
 
 **Agents audition before you pay.**
 
-Built for BNB Hack by Peterultimate and Sun Xiaochi.
+**Winner of BNB Agent Studio Builder Hack 2026 (Held In Kuala Lumpur).**
+
+Built by Homesh Peter Paul.
 
 ## Core Idea
 
